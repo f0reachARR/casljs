@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -45,43 +44,23 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 	for i, line := range lines {
 		asmState.line = i + 1
 
-		// Remove comments
-		if idx := strings.Index(line, ";"); idx >= 0 {
-			// Check if semicolon is inside quotes
-			hasQuote := false
-			for j := 0; j < idx; j++ {
-				if line[j] == '\'' {
-					hasQuote = !hasQuote
-				}
-			}
-			if !hasQuote {
-				line = line[:idx]
-			}
-		}
-
-		// Remove trailing spaces
-		line = strings.TrimRight(line, " \t")
-
 		// Skip empty lines
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		// Extract label, instruction, and operands
-		var label, inst, opr string
-		re1 := regexp.MustCompile(`^(\S+)?\s+([A-Z]+)(\s+(.*))?$`)
-		re2 := regexp.MustCompile(`^(\S+)\s*$`)
+		// Parse the line using the new lexer-based parser
+		parsed, err := ParseLine(line, asmState.line)
+		if err != nil {
+			return "", errorCasl2(asmState, fmt.Sprintf("Syntax error: %s", err))
+		}
 
-		if matches := re1.FindStringSubmatch(line); matches != nil {
-			label = matches[1]
-			inst = matches[2]
-			if len(matches) > 4 {
-				opr = matches[4]
-			}
-		} else if matches := re2.FindStringSubmatch(line); matches != nil {
-			label = matches[1]
-		} else {
-			return "", errorCasl2(asmState, fmt.Sprintf("Syntax error: %s", line))
+		// Extract label, instruction, and operands from parsed result
+		label := parsed.Label
+		inst := parsed.Instruction
+		var opr string
+		if len(parsed.Operands) > 0 {
+			opr = strings.Join(parsed.Operands, ",")
 		}
 
 		// Keep every line in buf
@@ -117,11 +96,8 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 
 			instType := instDef.Type
 
-			// Parse operands
-			var oprArray []string
-			if strings.TrimSpace(opr) != "" {
-				oprArray = parseOperands(opr)
-			}
+			// Parse operands - already parsed by ParseLine
+			oprArray := parsed.Operands
 
 			// START must be the first instruction
 			if !inBlock && instType != START {
@@ -130,7 +106,7 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 
 			// GR0 cannot be used as index register
 			if len(oprArray) > 2 {
-				if matched, _ := regexp.MatchString(`^(GR)?0$`, oprArray[2]); matched {
+				if isGR0(oprArray[2]) {
 					return "", errorCasl2(asmState, "Can't use GR0 as an index register")
 				}
 			}
@@ -148,7 +124,7 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 				// Handle literals
 				if strings.HasPrefix(oprArray[1], "=") {
 					oprArray[1] = handleLiteral(oprArray[1], &literalStack, &asmState.literalCounter)
-				} else if isLabel(oprArray[1]) && !isRegister(oprArray[1]) {
+				} else if IsValidLabel(oprArray[1]) && !IsRegister(oprArray[1]) {
 					oprArray[1] = asmState.varScope + ":" + oprArray[1]
 				}
 
@@ -163,7 +139,7 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 					oprArray = append(oprArray, "0")
 				}
 
-				if !isRegister(oprArray[0]) && isLabel(oprArray[0]) {
+				if !IsRegister(oprArray[0]) && IsValidLabel(oprArray[0]) {
 					if strings.Contains(inst, "CALL") {
 						oprArray[0] = "CALL_" + asmState.varScope + ":" + oprArray[0]
 					} else {
@@ -199,12 +175,12 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 				// Handle literals
 				if strings.HasPrefix(oprArray[1], "=") {
 					oprArray[1] = handleLiteral(oprArray[1], &literalStack, &asmState.literalCounter)
-				} else if isLabel(oprArray[1]) && !isRegister(oprArray[1]) {
+				} else if IsValidLabel(oprArray[1]) && !IsRegister(oprArray[1]) {
 					oprArray[1] = asmState.varScope + ":" + oprArray[1]
 				}
 
 				// Check if GR,GR form
-				if isRegister(oprArray[1]) {
+				if IsRegister(oprArray[1]) {
 					instCode := int(instDef.Code) + 4
 					genCode3(asmState.memory, address, instCode, oprArray[0], oprArray[1], asmState)
 					address++
@@ -263,7 +239,7 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 						}
 						genCode1(asmState.memory, address, 0, asmState)
 						address++
-					} else if matched, _ := regexp.MatchString(`^[+-]?\d+|^\#[\da-fA-F]+`, lit); matched {
+					} else if isNumberOrHex(lit) {
 						genCode1(asmState.memory, address, lit, asmState)
 						address++
 					} else {
@@ -301,7 +277,7 @@ func pass1(source string, asmState *AssemblerState) (string, error) {
 						}
 						genCode1(asmState.memory, address, 0, asmState)
 						address++
-					} else if isLabel(op) {
+					} else if IsValidLabel(op) {
 						op = asmState.varScope + ":" + op
 						genCode1(asmState.memory, address, op, asmState)
 						address++
@@ -403,9 +379,9 @@ func pass2(asmState *AssemblerState) ([]uint16, error) {
 		if *optAll {
 			bufLine := strings.Split(asmState.buf[asmState.line-1], "\t")
 			if len(bufLine) > 0 {
-				re := regexp.MustCompile(`:([a-zA-Z\$%_\.][0-9a-zA-Z\$%_\.]*)$`)
-				if matches := re.FindStringSubmatch(bufLine[0]); matches != nil {
-					bufLine[0] = matches[1]
+				// Extract label after colon
+				if idx := strings.LastIndex(bufLine[0], ":"); idx >= 0 {
+					bufLine[0] = bufLine[0][idx+1:]
 				}
 			}
 			line := strings.Join(bufLine, "\t")
@@ -447,13 +423,14 @@ func pass2(asmState *AssemblerState) ([]uint16, error) {
 
 		for _, sym := range symbols {
 			label := sym.name
-			re := regexp.MustCompile(`^([a-zA-Z\$%_\.][0-9a-zA-Z\$%_\.]*):([a-zA-Z\$%_\.][0-9a-zA-Z\$%_\.]*)$`)
-			if matches := re.FindStringSubmatch(label); matches != nil {
+			// Parse scope:label format
+			parts := strings.Split(label, ":")
+			if len(parts) == 2 {
 				var labelView string
-				if matches[1] == matches[2] {
-					labelView = matches[2]
+				if parts[0] == parts[1] {
+					labelView = parts[1]
 				} else {
-					labelView = fmt.Sprintf("%s (%s)", matches[2], matches[1])
+					labelView = fmt.Sprintf("%s (%s)", parts[1], parts[0])
 				}
 				val := expandLabel(asmState.symtbl, label)
 				asmState.outdump = append(asmState.outdump, fmt.Sprintf("%d:\t%s\t%s", sym.line, hex(val, 4), labelView))
@@ -502,16 +479,6 @@ func parseOperands(opr string) []string {
 	return result
 }
 
-func isLabel(s string) bool {
-	matched, _ := regexp.MatchString(`^[a-zA-Z\$%_\.][0-9a-zA-Z\$%_\.]*$`, s)
-	return matched
-}
-
-func isRegister(s string) bool {
-	matched, _ := regexp.MatchString(`^GR[0-7]$`, strings.ToUpper(s))
-	return matched
-}
-
 func handleLiteral(lit string, stack *[]string, counter *int) string {
 	newLit := fmt.Sprintf("%s_%d", lit, *counter)
 	*stack = append(*stack, newLit)
@@ -520,7 +487,7 @@ func handleLiteral(lit string, stack *[]string, counter *int) string {
 }
 
 func checkLabel(asmState *AssemblerState, label string) error {
-	if !isLabel(label) {
+	if !IsValidLabel(label) {
 		return errorCasl2(asmState, fmt.Sprintf("Invalid label \"%s\"", label))
 	}
 	return nil
@@ -598,10 +565,10 @@ func expandLabel(symtbl map[string]*SymbolEntry, val interface{}) int {
 				return expandLabel(symtbl, entry.Val)
 			}
 
-			// Try with scope
-			re := regexp.MustCompile(`:([a-zA-Z\$%_\.][0-9a-zA-Z\$%_\.]*)$`)
-			if matches := re.FindStringSubmatch(v); matches != nil {
-				k := matches[1] + ":" + matches[1]
+			// Try with scope - extract label after colon
+			if idx := strings.LastIndex(v, ":"); idx >= 0 {
+				labelPart := v[idx+1:]
+				k := labelPart + ":" + labelPart
 				if entry, exists := symtbl[k]; exists {
 					return expandLabel(symtbl, entry.Val)
 				}
@@ -622,13 +589,52 @@ func expandLabel(symtbl map[string]*SymbolEntry, val interface{}) int {
 }
 
 func checkRegister(register string) (int, error) {
-	re := regexp.MustCompile(`^(GR)?([0-7])$`)
-	matches := re.FindStringSubmatch(strings.ToUpper(register))
-	if matches == nil {
-		return 0, fmt.Errorf("Invalid register \"%s\"", register)
+	// Use the lexer's CheckRegister function
+	return CheckRegister(register)
+}
+
+// isNumberOrHex checks if a string is a number or hex number without regex
+func isNumberOrHex(s string) bool {
+	if len(s) == 0 {
+		return false
 	}
-	num, _ := strconv.Atoi(matches[2])
-	return num, nil
+	
+	// Check for hex
+	if s[0] == '#' {
+		if len(s) == 1 {
+			return false
+		}
+		for i := 1; i < len(s); i++ {
+			ch := s[i]
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+				return false
+			}
+		}
+		return true
+	}
+	
+	// Check for signed decimal
+	start := 0
+	if s[0] == '+' || s[0] == '-' {
+		start = 1
+	}
+	
+	if start >= len(s) {
+		return false
+	}
+	
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isGR0 checks if an operand is GR0 without regex
+func isGR0(s string) bool {
+	s = strings.ToUpper(s)
+	return s == "GR0" || s == "0"
 }
 
 func genCode1(memory map[int]*MemoryEntry, address int, val interface{}, asmState *AssemblerState) {

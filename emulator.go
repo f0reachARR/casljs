@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -156,11 +155,12 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 	}
 	eadr &= 0xffff
 
-	grIsGr := regexp.MustCompile(`GR[0-7], GR[0-7]`)
+	// Check if operand is GR,GR form
+	grIsGrForm := isGRGRForm(opr)
 
 	switch inst {
 	case "LD":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] = memGet(memory, eadr)
 			fr = getFlag(regs[gr])
 			pc += 2
@@ -179,7 +179,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		pc += 2
 
 	case "ADDA":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] = signed(regs[gr])
 			regs[gr] += memGet(memory, eadr)
 			ofr1 := 0
@@ -212,7 +212,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "SUBA":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] = signed(regs[gr])
 			regs[gr] -= memGet(memory, eadr)
 			ofr1 := 0
@@ -245,7 +245,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "ADDL":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] += memGet(memory, eadr)
 			ofr1 := 0
 			ofr2 := 0
@@ -274,7 +274,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "SUBL":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] -= memGet(memory, eadr)
 			ofr1 := 0
 			ofr2 := 0
@@ -303,7 +303,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "MULA":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] = signed(regs[gr])
 			regs[gr] *= memGet(memory, eadr)
 			ofr1 := 0
@@ -336,7 +336,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "MULL":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] *= memGet(memory, eadr)
 			ofr1 := 0
 			ofr2 := 0
@@ -366,7 +366,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "DIVA":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] = signed(regs[gr])
 			m := memGet(memory, eadr)
 			if m == 0 {
@@ -412,7 +412,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "DIVL":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			m := memGet(memory, eadr)
 			if m == 0 {
 				fr = FR_OVER | FR_ZERO
@@ -455,7 +455,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "AND":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] &= memGet(memory, eadr)
 			fr = getFlag(regs[gr])
 			pc += 2
@@ -466,7 +466,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "OR":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] |= memGet(memory, eadr)
 			fr = getFlag(regs[gr])
 			pc += 2
@@ -477,7 +477,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "XOR":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			regs[gr] ^= memGet(memory, eadr)
 			fr = getFlag(regs[gr])
 			pc += 2
@@ -488,7 +488,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "CPA":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			val = signed(regs[gr]) - signed(memGet(memory, eadr))
 			if val > MAX_SIGNED {
 				val = MAX_SIGNED
@@ -511,7 +511,7 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 		}
 
 	case "CPL":
-		if !grIsGr.MatchString(opr) {
+		if !grIsGrForm {
 			val = regs[gr] - memGet(memory, eadr)
 			if val > MAX_SIGNED {
 				val = MAX_SIGNED
@@ -676,4 +676,18 @@ func stepExec(memory []uint16, state []int) (bool, error) {
 	}
 
 	return stopFlag, nil
+}
+
+// isGRGRForm checks if the operand string is in GR,GR format without regex
+func isGRGRForm(opr string) bool {
+	// Format: "GRx, GRy" where x and y are 0-7
+	parts := strings.Split(opr, ",")
+	if len(parts) != 2 {
+		return false
+	}
+	
+	part1 := strings.TrimSpace(parts[0])
+	part2 := strings.TrimSpace(parts[1])
+	
+	return IsRegister(part1) && IsRegister(part2)
 }
