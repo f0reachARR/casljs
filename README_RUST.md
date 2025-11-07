@@ -4,18 +4,44 @@ This is a Rust implementation of the CASL II assembler / COMET II emulator.
 
 ## Status
 
-**Work in Progress** - Basic structure implemented, core functionality under development.
+**Completed** - Full CASL II assembler and COMET II emulator implementation.
 
-### Completed
-- Project structure setup
-- Command-line argument parsing
-- File I/O
-- Basic scaffolding for assembler and emulator
+### Implemented Features
 
-### In Progress
-- CASL II assembler implementation
-- COMET II emulator implementation
-- Test compatibility with existing test suite
+#### Lexer
+- Hand-written tokenizer (no regex)
+- Case-insensitive instruction and register parsing
+- Support for all CASL2 tokens: labels, instructions, registers, numbers, immediates, strings, literals, comments
+- 16 comprehensive unit tests
+
+#### Parser
+- Recursive descent parser (LL(1) style)
+- Type-safe AST construction
+- All instruction types and pseudo-instructions
+- 17 comprehensive unit tests
+
+#### Assembler
+- Two-pass code generation
+- Pass 1: Symbol table with label scoping (START/END blocks)
+- Pass 2: Machine code generation with label resolution
+- Literal addressing (=value) - literals placed at END
+- Macro expansion: IN, OUT, RPUSH, RPOP
+- DC string handling (each character → 1 word)
+- All CASL2 instructions and addressing modes
+
+#### Emulator
+- Full COMET2 virtual machine
+- 8 general-purpose registers (GR0-GR7), PC, SP, FR
+- 64K word memory
+- All arithmetic and logical operations
+- Comparison, branch, and jump instructions
+- Stack operations and subroutine support
+- System calls: IN, OUT, termination, error handling
+
+### Test Results
+- All unit tests pass (33/33)
+- Successfully assembles sample programs
+- Compatible with test suite format
 
 ## Building
 
