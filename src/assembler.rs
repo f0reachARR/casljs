@@ -27,6 +27,7 @@ pub struct Assembler {
     current_scope: String,
     literal_counter: usize,
     start_address: u16,
+    literals: HashMap<String, String>,  // literal_value -> label
 }
 
 impl Assembler {
@@ -38,6 +39,7 @@ impl Assembler {
             current_scope: String::new(),
             literal_counter: 0,
             start_address: 0,
+            literals: HashMap::new(),
         }
     }
 
@@ -57,6 +59,7 @@ impl Assembler {
         let mut address: u16 = 0;
         let mut in_program = false;
         let mut start_label: Option<String> = None;
+        let mut scope_literals: Vec<String> = Vec::new();
 
         for line in &self.program.lines {
             // Handle START specially - set scope before adding label
@@ -110,6 +113,24 @@ impl Assembler {
                                 line.line_number
                             ));
                         }
+
+                        // Place literals before END
+                        for lit_val in &scope_literals {
+                            let lit_label = format!("{}:_LIT{}", self.current_scope, self.literal_counter);
+                            self.literal_counter += 1;
+                            self.literals.insert(lit_val.clone(), lit_label.clone());
+
+                            self.symbols.insert(
+                                lit_label,
+                                Symbol {
+                                    address,
+                                    line_number: line.line_number,
+                                },
+                            );
+                            address += 1; // Each literal takes 1 word
+                        }
+                        scope_literals.clear();
+
                         in_program = false;
                         self.current_scope.clear();
                     }
@@ -123,39 +144,58 @@ impl Assembler {
                         address += *count as u16;
                     }
                     Instruction::Dc(values) => {
-                        address += values.len() as u16;
+                        // Calculate actual size: strings expand to multiple words
+                        for value in values {
+                            match value {
+                                DcValue::String(s) => {
+                                    address += s.len() as u16;
+                                }
+                                _ => {
+                                    address += 1;
+                                }
+                            }
+                        }
                     }
                     Instruction::In(_, _) => {
-                        // IN macro expands to multiple instructions
-                        // For now, estimate size (actual expansion in pass2)
-                        address += 8; // Approximate size
+                        // IN macro: PUSH 0,GRx; SVC IN_ADDR
+                        address += 4;
                     }
                     Instruction::Out(_, _) => {
-                        // OUT macro expands to multiple instructions
-                        address += 8; // Approximate size
+                        // OUT macro: PUSH 0,GRx; SVC OUT_ADDR
+                        address += 4;
                     }
                     Instruction::Rpush => {
-                        // RPUSH macro: PUSH all registers
-                        address += 7; // PUSH for GR1-GR7
+                        // RPUSH macro: PUSH for GR1-GR7
+                        address += 14; // 7 PUSH instructions, each 2 words
                     }
                     Instruction::Rpop => {
-                        // RPOP macro: POP all registers in reverse
-                        address += 7; // POP for GR7-GR1
+                        // RPOP macro: POP for GR7-GR1
+                        address += 7; // 7 POP instructions, each 1 word
                     }
                     Instruction::NoOperand(_) => {
-                        address += 1; // 1 word
+                        address += 1;
                     }
                     Instruction::OneReg(_, _) => {
-                        address += 1; // 1 word (POP)
+                        address += 1;
                     }
-                    Instruction::Addr(_, _, _) => {
-                        address += 2; // 2 words
+                    Instruction::Addr(_, addr, _) => {
+                        if let Address::Literal(lit) = addr {
+                            if !scope_literals.contains(lit) {
+                                scope_literals.push(lit.clone());
+                            }
+                        }
+                        address += 2;
                     }
-                    Instruction::RegAddr(inst, _, _, _) => {
-                        address += 2; // 2 words
+                    Instruction::RegAddr(_, _, addr, _) => {
+                        if let Address::Literal(lit) = addr {
+                            if !scope_literals.contains(lit) {
+                                scope_literals.push(lit.clone());
+                            }
+                        }
+                        address += 2;
                     }
                     Instruction::TwoReg(_, _, _) => {
-                        address += 1; // 1 word
+                        address += 1;
                     }
                 }
             }
@@ -181,6 +221,7 @@ impl Assembler {
     fn pass2(&mut self) -> Result<Vec<u16>> {
         let mut binary: Vec<u16> = Vec::new();
         let mut in_program = false;
+        let mut scope_literals: Vec<String> = Vec::new();
 
         for line in &self.program.lines {
             if let Some(ref inst) = line.instruction {
@@ -192,19 +233,35 @@ impl Assembler {
                         }
                     }
                     Instruction::End => {
+                        // Generate literals before END
+                        for lit_val in &scope_literals {
+                            let word = self.parse_literal_value(lit_val)?;
+                            binary.push(word);
+                        }
+                        scope_literals.clear();
+
                         in_program = false;
                         self.current_scope.clear();
                     }
                     Instruction::Ds(count) => {
-                        // Allocate uninitialized memory
                         for _ in 0..*count {
                             binary.push(0);
                         }
                     }
                     Instruction::Dc(values) => {
                         for value in values {
-                            let word = self.resolve_dc_value(value, line.line_number)?;
-                            binary.push(word);
+                            match value {
+                                DcValue::String(s) => {
+                                    // Each character becomes a separate word
+                                    for ch in s.chars() {
+                                        binary.push(ch as u16);
+                                    }
+                                }
+                                _ => {
+                                    let word = self.resolve_dc_value(value, line.line_number)?;
+                                    binary.push(word);
+                                }
+                            }
                         }
                     }
                     Instruction::NoOperand(op) => {
@@ -217,6 +274,11 @@ impl Assembler {
                         binary.push((code << 8) | (r << 4) as u16);
                     }
                     Instruction::Addr(op, addr, index) => {
+                        if let Address::Literal(lit) = addr {
+                            if !scope_literals.contains(lit) {
+                                scope_literals.push(lit.clone());
+                            }
+                        }
                         let code = self.opcode_addr(op);
                         let xr = index.as_ref().map_or(0, |r| r.to_u8());
                         binary.push((code << 8) | (xr as u16));
@@ -224,6 +286,11 @@ impl Assembler {
                         binary.push(addr_val);
                     }
                     Instruction::RegAddr(op, reg, addr, index) => {
+                        if let Address::Literal(lit) = addr {
+                            if !scope_literals.contains(lit) {
+                                scope_literals.push(lit.clone());
+                            }
+                        }
                         let code = self.opcode_reg_addr(op);
                         let r = reg.to_u8();
                         let xr = index.as_ref().map_or(0, |r| r.to_u8());
@@ -237,29 +304,44 @@ impl Assembler {
                         let reg2 = r2.to_u8();
                         binary.push((code << 8) | ((reg1 << 4) as u16) | (reg2 as u16));
                     }
-                    Instruction::In(_, _) => {
-                        return Err(format!(
-                            "Line {}: IN macro not yet implemented",
-                            line.line_number
-                        ));
+                    Instruction::In(buf_label, len_label) => {
+                        // IN macro expands to: PUSH 0,GRx; PUSH 0,GRy; SVC SYS_IN
+                        let buf_addr = self.resolve_label(buf_label)?;
+                        let len_addr = self.resolve_label(len_label)?;
+
+                        // PUSH 0, buf_addr
+                        binary.push(0x7000); // PUSH, 0, 0
+                        binary.push(buf_addr);
+
+                        // PUSH 0, len_addr
+                        binary.push(0x7000);
+                        binary.push(len_addr);
                     }
-                    Instruction::Out(_, _) => {
-                        return Err(format!(
-                            "Line {}: OUT macro not yet implemented",
-                            line.line_number
-                        ));
+                    Instruction::Out(buf_label, len_label) => {
+                        // OUT macro expands to: PUSH 0,GRx; PUSH 0,GRy; SVC SYS_OUT
+                        let buf_addr = self.resolve_label(buf_label)?;
+                        let len_addr = self.resolve_label(len_label)?;
+
+                        // PUSH 0, buf_addr
+                        binary.push(0x7000);
+                        binary.push(buf_addr);
+
+                        // PUSH 0, len_addr
+                        binary.push(0x7000);
+                        binary.push(len_addr);
                     }
                     Instruction::Rpush => {
-                        return Err(format!(
-                            "Line {}: RPUSH macro not yet implemented",
-                            line.line_number
-                        ));
+                        // RPUSH: PUSH 0,GR1; PUSH 0,GR2; ... PUSH 0,GR7
+                        for reg in 1..=7 {
+                            binary.push(0x7000 | (reg << 4)); // PUSH with register
+                            binary.push(0);
+                        }
                     }
                     Instruction::Rpop => {
-                        return Err(format!(
-                            "Line {}: RPOP macro not yet implemented",
-                            line.line_number
-                        ));
+                        // RPOP: POP GR7; POP GR6; ... POP GR1
+                        for reg in (1..=7).rev() {
+                            binary.push(0x7100 | (reg << 4)); // POP with register
+                        }
                     }
                 }
             }
@@ -272,14 +354,12 @@ impl Assembler {
         match value {
             DcValue::Number(n) => Ok(*n as u16),
             DcValue::Immediate(imm) => Ok(*imm),
-            DcValue::String(s) => {
-                if s.len() != 1 {
-                    return Err(format!(
-                        "Line {}: DC string must be single character or use multiple DC values",
-                        line_number
-                    ));
-                }
-                Ok(s.chars().next().unwrap() as u16)
+            DcValue::String(_) => {
+                // String values should be handled separately in pass2
+                Err(format!(
+                    "Line {}: Internal error: String should not reach resolve_dc_value",
+                    line_number
+                ))
             }
             DcValue::Label(label) => {
                 let scoped = format!("{}:{}", self.current_scope, label);
@@ -310,13 +390,54 @@ impl Assembler {
                     ))
                 }
             }
-            Address::Literal(_) => {
-                // TODO: Implement literal expansion
-                Err(format!(
-                    "Line {}: Literal addressing not yet implemented",
-                    line_number
-                ))
+            Address::Literal(lit) => {
+                // Resolve literal to its label
+                if let Some(lit_label) = self.literals.get(lit) {
+                    if let Some(sym) = self.symbols.get(lit_label) {
+                        Ok(sym.address)
+                    } else {
+                        Err(format!(
+                            "Line {}: Internal error: literal label not found",
+                            line_number
+                        ))
+                    }
+                } else {
+                    Err(format!(
+                        "Line {}: Internal error: literal not registered",
+                        line_number
+                    ))
+                }
             }
+        }
+    }
+
+    fn resolve_label(&self, label: &str) -> Result<u16> {
+        let scoped = format!("{}:{}", self.current_scope, label);
+        if let Some(sym) = self.symbols.get(&scoped) {
+            Ok(sym.address)
+        } else {
+            Err(format!("Undefined label '{}'", label))
+        }
+    }
+
+    fn parse_literal_value(&self, lit: &str) -> Result<u16> {
+        // Parse literal value (e.g., "10", "'A'", "#FFFF")
+        if lit.starts_with('\'') && lit.ends_with('\'') {
+            // String literal
+            let s = &lit[1..lit.len()-1];
+            if s.len() != 1 {
+                return Err(format!("Literal string must be single character: {}", lit));
+            }
+            Ok(s.chars().next().unwrap() as u16)
+        } else if lit.starts_with('#') {
+            // Hex immediate
+            u16::from_str_radix(&lit[1..], 16)
+                .map_err(|_| format!("Invalid hex literal: {}", lit))
+        } else {
+            // Decimal number
+            lit.parse::<i32>()
+                .map(|n| n as u16)
+                .map_err(|_| format!("Invalid numeric literal: {}", lit))
         }
     }
 

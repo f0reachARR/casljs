@@ -1,0 +1,6 @@
+MAIN START
+  LD GR1, =10
+  LD GR2, =20
+  ADDA GR1, GR2
+  RET
+  END

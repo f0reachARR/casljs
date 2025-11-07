@@ -289,10 +289,11 @@ impl Lexer {
             }
             Some(ch) if Self::is_label_start(ch) => {
                 let ident = self.read_identifier();
+                let ident_upper = ident.to_uppercase();
 
-                // Check if it's a register (GRn format)
-                if ident.len() == 3 && ident.starts_with("GR") {
-                    if let Some(digit_ch) = ident.chars().nth(2) {
+                // Check if it's a register (GRn format) - case insensitive
+                if ident_upper.len() == 3 && ident_upper.starts_with("GR") {
+                    if let Some(digit_ch) = ident_upper.chars().nth(2) {
                         if let Some(digit) = digit_ch.to_digit(10) {
                             if digit <= 7 {
                                 return Ok(Token::Register(digit as u8));
@@ -301,24 +302,21 @@ impl Lexer {
                     }
                 }
 
-                // Check if it's an instruction (all uppercase)
-                if ident.chars().all(|c| c.is_ascii_uppercase()) {
-                    // Known instructions
-                    match ident.as_str() {
-                        "NOP" | "LD" | "ST" | "LAD" | "ADDA" | "SUBA" | "ADDL" | "SUBL" |
-                        "MULA" | "DIVA" | "MULL" | "DIVL" | "AND" | "OR" | "XOR" |
-                        "CPA" | "CPL" | "SLA" | "SRA" | "SLL" | "SRL" |
-                        "JMI" | "JNZ" | "JZE" | "JUMP" | "JPL" | "JOV" |
-                        "PUSH" | "POP" | "CALL" | "RET" | "SVC" |
-                        "START" | "END" | "DS" | "DC" |
-                        "IN" | "OUT" | "RPUSH" | "RPOP" => {
-                            return Ok(Token::Instruction(ident));
-                        }
-                        _ => {}
+                // Check if it's an instruction - case insensitive
+                match ident_upper.as_str() {
+                    "NOP" | "LD" | "ST" | "LAD" | "ADDA" | "SUBA" | "ADDL" | "SUBL" |
+                    "MULA" | "DIVA" | "MULL" | "DIVL" | "AND" | "OR" | "XOR" |
+                    "CPA" | "CPL" | "SLA" | "SRA" | "SLL" | "SRL" |
+                    "JMI" | "JNZ" | "JZE" | "JUMP" | "JPL" | "JOV" |
+                    "PUSH" | "POP" | "CALL" | "RET" | "SVC" |
+                    "START" | "END" | "DS" | "DC" |
+                    "IN" | "OUT" | "RPUSH" | "RPOP" => {
+                        return Ok(Token::Instruction(ident_upper));
                     }
+                    _ => {}
                 }
 
-                // Otherwise, it's a label
+                // Otherwise, it's a label (keep original case)
                 Ok(Token::Label(ident))
             }
             Some(ch) => {

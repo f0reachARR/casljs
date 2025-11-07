@@ -686,6 +686,61 @@ impl Comet2 {
                     println!("***** Run-Time Error : Range-Over in Array Index *****");
                 }
             }
+            SYS_IN => {
+                // IN: POP len_addr, POP buf_addr, read input
+                let len_addr = self.memory[self.sp as usize];
+                self.sp = self.sp.wrapping_add(1);
+                let buf_addr = self.memory[self.sp as usize];
+                self.sp = self.sp.wrapping_add(1);
+
+                // Read input line
+                if self.current_input < self.input_lines.len() {
+                    let line = &self.input_lines[self.current_input];
+                    self.current_input += 1;
+
+                    if !self.quiet {
+                        print!("IN> {}\n", line);
+                        io::stdout().flush().ok();
+                    }
+
+                    // Store characters in buffer
+                    let max_len = self.memory[len_addr as usize] as usize;
+                    let chars: Vec<char> = line.chars().collect();
+                    let copy_len = chars.len().min(max_len);
+
+                    for (i, &ch) in chars.iter().take(copy_len).enumerate() {
+                        self.memory[(buf_addr as usize) + i] = ch as u16;
+                    }
+
+                    // Update length
+                    self.memory[len_addr as usize] = copy_len as u16;
+                } else {
+                    // No more input, set length to 0
+                    self.memory[len_addr as usize] = 0;
+                }
+            }
+            SYS_OUT => {
+                // OUT: POP len_addr, POP buf_addr, write output
+                let len_addr = self.memory[self.sp as usize];
+                self.sp = self.sp.wrapping_add(1);
+                let buf_addr = self.memory[self.sp as usize];
+                self.sp = self.sp.wrapping_add(1);
+
+                let len = self.memory[len_addr as usize] as usize;
+                if !self.quiet {
+                    print!("OUT> ");
+                }
+
+                for i in 0..len {
+                    let ch = self.memory[(buf_addr as usize) + i];
+                    if ch == 0 {
+                        break;
+                    }
+                    print!("{}", (ch as u8) as char);
+                }
+                println!();
+                io::stdout().flush().ok();
+            }
             _ => {
                 return Err(format!("Unknown SVC code: {}", code));
             }
