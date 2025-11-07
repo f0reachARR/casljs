@@ -1,3 +1,9 @@
+// Package main provides the CASL2 assembler and COMET2 emulator.
+// 
+// This file contains an LL(1) lexer and parser for CASL2 that was developed
+// to remove regex dependencies. It is currently not used by the main assembler
+// but is kept for potential future refactoring. The assembler.go file uses
+// a proven regex-based parser for stability.
 package main
 
 import (
