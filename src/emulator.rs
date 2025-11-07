@@ -695,11 +695,9 @@ impl Comet2 {
                 }
             }
             SYS_IN => {
-                // IN: POP len_addr, POP buf_addr, read input
-                let len_addr = self.memory[self.sp as usize];
-                self.sp = self.sp.wrapping_add(1);
-                let buf_addr = self.memory[self.sp as usize];
-                self.sp = self.sp.wrapping_add(1);
+                // IN: Get buf_addr from GR1, len_addr from GR2
+                let buf_addr = self.gr[1];
+                let len_addr = self.gr[2];
 
                 // Read input line
                 if self.current_input < self.input_lines.len() {
@@ -730,11 +728,9 @@ impl Comet2 {
                 }
             }
             SYS_OUT => {
-                // OUT: POP len_addr, POP buf_addr, write output
-                let len_addr = self.memory[self.sp as usize];
-                self.sp = self.sp.wrapping_add(1);
-                let buf_addr = self.memory[self.sp as usize];
-                self.sp = self.sp.wrapping_add(1);
+                // OUT: Get buf_addr from GR1, len_addr from GR2
+                let buf_addr = self.gr[1];
+                let len_addr = self.gr[2];
 
                 let len = self.memory[len_addr as usize] as usize;
                 let mut output_line = String::new();

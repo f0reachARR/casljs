@@ -157,12 +157,12 @@ impl Assembler {
                         }
                     }
                     Instruction::In(_, _) => {
-                        // IN macro: PUSH 0,GRx; SVC IN_ADDR
-                        address += 4;
+                        // IN macro: PUSH GR1, PUSH GR2, LAD GR1, LAD GR2, SVC, POP GR2, POP GR1 = 12 words
+                        address += 12;
                     }
                     Instruction::Out(_, _) => {
-                        // OUT macro: PUSH 0,GRx; SVC OUT_ADDR
-                        address += 4;
+                        // OUT macro: PUSH GR1, PUSH GR2, LAD GR1, LAD GR2, SVC, POP GR2, POP GR1 = 12 words
+                        address += 12;
                     }
                     Instruction::Rpush => {
                         // RPUSH macro: PUSH for GR1-GR7
@@ -305,30 +305,66 @@ impl Assembler {
                         binary.push((code << 8) | ((reg1 << 4) as u16) | (reg2 as u16));
                     }
                     Instruction::In(buf_label, len_label) => {
-                        // IN macro expands to: PUSH 0,GRx; PUSH 0,GRy; SVC SYS_IN
+                        // IN macro: PUSH GR1, PUSH GR2, LAD GR1=buf, LAD GR2=len, SVC
                         let buf_addr = self.resolve_label(buf_label)?;
                         let len_addr = self.resolve_label(len_label)?;
 
-                        // PUSH 0, buf_addr
-                        binary.push(0x7000); // PUSH, 0, 0
+                        // PUSH 0,GR1 - save GR1
+                        binary.push(0x7010);
+                        binary.push(0);
+
+                        // PUSH 0,GR2 - save GR2
+                        binary.push(0x7020);
+                        binary.push(0);
+
+                        // LAD GR1,buf_addr
+                        binary.push(0x1210);
                         binary.push(buf_addr);
 
-                        // PUSH 0, len_addr
-                        binary.push(0x7000);
+                        // LAD GR2,len_addr
+                        binary.push(0x1220);
                         binary.push(len_addr);
+
+                        // SVC SYS_IN (0xFFF0)
+                        binary.push(0xF000);
+                        binary.push(0xFFF0);
+
+                        // POP GR2 - restore GR2
+                        binary.push(0x7120);
+
+                        // POP GR1 - restore GR1
+                        binary.push(0x7110);
                     }
                     Instruction::Out(buf_label, len_label) => {
-                        // OUT macro expands to: PUSH 0,GRx; PUSH 0,GRy; SVC SYS_OUT
+                        // OUT macro: PUSH GR1, PUSH GR2, LAD GR1=buf, LAD GR2=len, SVC
                         let buf_addr = self.resolve_label(buf_label)?;
                         let len_addr = self.resolve_label(len_label)?;
 
-                        // PUSH 0, buf_addr
-                        binary.push(0x7000);
+                        // PUSH 0,GR1 - save GR1
+                        binary.push(0x7010);
+                        binary.push(0);
+
+                        // PUSH 0,GR2 - save GR2
+                        binary.push(0x7020);
+                        binary.push(0);
+
+                        // LAD GR1,buf_addr
+                        binary.push(0x1210);
                         binary.push(buf_addr);
 
-                        // PUSH 0, len_addr
-                        binary.push(0x7000);
+                        // LAD GR2,len_addr
+                        binary.push(0x1220);
                         binary.push(len_addr);
+
+                        // SVC SYS_OUT (0xFFF2)
+                        binary.push(0xF000);
+                        binary.push(0xFFF2);
+
+                        // POP GR2 - restore GR2
+                        binary.push(0x7120);
+
+                        // POP GR1 - restore GR1
+                        binary.push(0x7110);
                     }
                     Instruction::Rpush => {
                         // RPUSH: PUSH 0,GR1; PUSH 0,GR2; ... PUSH 0,GR7
