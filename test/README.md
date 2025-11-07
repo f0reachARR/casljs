@@ -1,72 +1,62 @@
-# casl2comet2js.htmlテスト
+# CASL2/COMET2 Go Implementation Tests
 
-pytestとseleniumで`casl2comet2js.html`のrunコマンドをテストします．  
-テストに使用する入力データとして`sample*.cas`および`input.json`を使用します．
+This directory contains tests for the Go implementation of the CASL2 assembler and COMET2 emulator.
 
-`terminal_casl2comet2_test.py`がテストコードの本体です．  
-このテストコードはActionsからも実行されます．
+## Test Structure
 
-## テストのセットアップ
+- `samples/`: CASL2 source files used for testing
+- `test_expects/`: Expected output files for each test sample
+- `c2c2_test.go` (in parent directory): Go test suite
 
-`terminal_casl2comet2_test.py`を実行するには以下のセットアップが必要です．
+## Running Tests
 
-1. Firefox，Chrome，Python3をインストールする
-2. 依存するモジュールをpipからインストールする
-    ```bash
-    # testディレクトリ内で実行
-    pip install -r requirements.txt
-    ```
+The tests are written in Go and use the standard Go testing framework.
 
-## テスト入力
+### Prerequisites
 
-CASL2ファイルとして`sample*.cas`を使用します．`samples`フォルダ内に入ってあります．
+- Go 1.21 or later
+- The `c2c2` binary must be built before running tests
 
-IN命令から入力される文字列は`input.json`ファイルに記述します．
+### Build and Test
 
-## テスト実行
-
-テストは`sample*.cas`の数だけ行われます．
-
-pytestコマンドから実行できます．
 ```bash
-# testディレクトリ内で実行
-pytest -v
+# From the repository root
+go build -o c2c2 .
+go test -v
 ```
 
-また，ブラウザを指定してテストを実行する際には，`-k`オプションを使用してブラウザを指定することもできます．
+### Run tests with coverage
+
 ```bash
-# testディレクトリ内で実行
-
-# Firefoxでテストする場合
-pytest -v -k Firefox
-
-# Chromeでテストする場合
-pytest -v -k Chrome
+go test -v -race -coverprofile=coverage.txt -covermode=atomic
 ```
 
-## テスト結果
+### Run specific tests
 
-テスト結果は，`sample*.cas`から期待される出力(COMET2ターミナルの出力)が行われたかどうかで判定されます．
-
-`sampleN.cas`から期待される出力は`test_expect/sampleN.cas.out`に記載されてあります．
-
-期待される出力と実際の出力が異なる場合，そのテストは失敗となります．
-
-また，アセンブラエラーや実行のタイムアウト(3秒，sample16のみ60秒)が発生した場合も失敗扱いとなります．
-
-# c2c2.js テスト
-
-## 関連ファイル
-
-* `input.json`: テスト対象に与える引数の定義です．
-* `c2c2_input.py`: `input.json`から`c2c2.js`の実行に必要な引数を生成します．
-* `samples/*/*.cas`: テスト対象です．
-* `test_expects/*.out`: テスト対象に関連するオラクルです．
-
-## テスト実行
-
-testディレクトリ内で以下のコマンドを実行します．
 ```bash
-./c2c2_test.sh
+# Test a specific sample
+go test -v -run TestC2C2Samples/sample11.cas
 ```
-実行結果が期待と違う場合には，diffが生成されます．
+
+## Test Samples
+
+Tests are run against all `sample*.cas` files in the `samples/` directory. Each test:
+
+1. Assembles the CASL2 source file
+2. Executes the COMET2 program with predefined inputs
+3. Compares the output against the expected output in `test_expects/`
+
+## Expected Output
+
+Expected output for each test is stored in `test_expects/` directory:
+- `sampleN.cas.out`: Expected output for `sampleN.cas`
+
+If the actual output differs from the expected output, the test fails and shows a diff.
+
+## Continuous Integration
+
+Tests are automatically run via GitHub Actions on:
+- Push to main branch
+- Pull requests to main branch
+- Multiple OS platforms: Ubuntu, Windows, macOS
+- Multiple Go versions: 1.21, 1.22
