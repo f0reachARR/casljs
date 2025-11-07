@@ -356,6 +356,9 @@ func ParseLine(line string, lineNum int) (*ParsedLine, error) {
 	result := &ParsedLine{Line: lineNum}
 
 	tokens := []Token{}
+	hasLeadingWhitespace := false
+	firstToken := true
+	
 	for {
 		tok := lexer.NextToken()
 		if tok.Type == TOKEN_EOF {
@@ -368,8 +371,12 @@ func ParseLine(line string, lineNum int) (*ParsedLine, error) {
 			break
 		}
 		if tok.Type == TOKEN_WHITESPACE {
+			if firstToken {
+				hasLeadingWhitespace = true
+			}
 			continue
 		}
+		firstToken = false
 		tokens = append(tokens, tok)
 	}
 
@@ -379,12 +386,12 @@ func ParseLine(line string, lineNum int) (*ParsedLine, error) {
 
 	pos := 0
 
-	// First token could be a label or instruction
-	// Check if it's a known instruction
-	if pos < len(tokens) && tokens[pos].Type == TOKEN_LABEL {
+	// If line starts with whitespace, first token is instruction
+	// Otherwise, first token could be label or instruction
+	if !hasLeadingWhitespace && pos < len(tokens) && tokens[pos].Type == TOKEN_LABEL {
 		// Check if this is an instruction by checking CASL2TBL
 		if isInstruction(tokens[pos].Value) {
-			// It's an instruction
+			// It's an instruction (no label)
 			result.Instruction = tokens[pos].Value
 			pos++
 		} else {
@@ -399,6 +406,14 @@ func ParseLine(line string, lineNum int) (*ParsedLine, error) {
 					pos++
 				}
 			}
+		}
+	} else if hasLeadingWhitespace && pos < len(tokens) && tokens[pos].Type == TOKEN_LABEL {
+		// Leading whitespace means first token must be instruction
+		if isInstruction(tokens[pos].Value) {
+			result.Instruction = tokens[pos].Value
+			pos++
+		} else {
+			return nil, fmt.Errorf("expected instruction after leading whitespace, got %s", tokens[pos].Value)
 		}
 	}
 
