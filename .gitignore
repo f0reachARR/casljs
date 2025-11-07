@@ -1,14 +1,12 @@
 perl/casl2
 perl/comet2
 .DS_Store
-node_modules
 *.com
 .vscode
 
-# test用
-__pycache__
-.pytest_cache
-test_results
-*.log
-drivers
-!test/input.json
+# Go binaries and build artifacts
+c2c2
+c2c2.exe
+*.test
+*.out
+coverage.txt
