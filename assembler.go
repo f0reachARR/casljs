@@ -581,7 +581,8 @@ func expandLabel(symtbl map[string]*SymbolEntry, val interface{}) int {
 		if strings.HasPrefix(v, "#") {
 			num, err := strconv.ParseInt(v[1:], 16, 64)
 			if err == nil {
-				return int(num) & 0xffff
+				// Safe: masked to 16 bits
+				return int(num & 0xffff)
 			}
 		}
 
@@ -609,7 +610,8 @@ func expandLabel(symtbl map[string]*SymbolEntry, val interface{}) int {
 
 		// Try to parse as decimal
 		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
-			return int(num) & 0xffff
+			// Safe: masked to 16 bits
+			return int(num & 0xffff)
 		}
 
 		// If all else fails, return 0
@@ -637,13 +639,15 @@ func genCode1(memory map[int]*MemoryEntry, address int, val interface{}, asmStat
 		// Check for hex
 		if strings.HasPrefix(v, "#") {
 			if num, err := strconv.ParseInt(v[1:], 16, 64); err == nil {
-				memory[address] = &MemoryEntry{Val: int(num), File: asmState.file, Line: asmState.line}
+				// Safe: COMET2 uses 16-bit values
+				memory[address] = &MemoryEntry{Val: int(num & 0xffff), File: asmState.file, Line: asmState.line}
 				return
 			}
 		}
 		// Check for decimal
 		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
-			memory[address] = &MemoryEntry{Val: int(num), File: asmState.file, Line: asmState.line}
+			// Safe: COMET2 uses 16-bit values
+			memory[address] = &MemoryEntry{Val: int(num & 0xffff), File: asmState.file, Line: asmState.line}
 			return
 		}
 		// Store as string (will be resolved in pass2)
@@ -661,7 +665,8 @@ func genCode2(memory map[int]*MemoryEntry, address int, code int, gr, adr, xr st
 	// Handle address operand
 	if strings.HasPrefix(adr, "#") {
 		if num, err := strconv.ParseInt(adr[1:], 16, 64); err == nil {
-			memory[address+1] = &MemoryEntry{Val: int(num), File: asmState.file, Line: asmState.line}
+			// Safe: COMET2 uses 16-bit addresses
+			memory[address+1] = &MemoryEntry{Val: int(num & 0xffff), File: asmState.file, Line: asmState.line}
 			return
 		}
 	}

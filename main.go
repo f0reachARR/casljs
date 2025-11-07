@@ -451,11 +451,19 @@ func expandNumber(val string) (int, bool) {
 		return 0, false
 	}
 	if strings.HasPrefix(val, "#") {
-		num, _ := strconv.ParseInt(val[1:], 16, 64)
-		return int(num) & 0xffff, true
+		num, err := strconv.ParseInt(val[1:], 16, 64)
+		if err != nil {
+			return 0, false
+		}
+		// Safe: masked to 16 bits
+		return int(num & 0xffff), true
 	}
-	num, _ := strconv.ParseInt(val, 10, 64)
-	return int(num) & 0xffff, true
+	num, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	// Safe: masked to 16 bits
+	return int(num & 0xffff), true
 }
 
 func getFlag(val int) int {
@@ -476,17 +484,8 @@ func memGet(memory []uint16, pc int) int {
 }
 
 func memPut(memory []uint16, pc int, val int) {
-	if pc < 0 {
+	if pc < 0 || pc >= len(memory) {
 		return
-	}
-	
-	// Ensure memory is large enough
-	for len(memory) <= pc {
-		// This won't work - we need to use pointers or return the slice
-		// For now, just bounds check
-		if pc >= len(memory) {
-			return
-		}
 	}
 	
 	memory[pc] = uint16(val & 0xffff)
