@@ -12,3 +12,6 @@ test_results
 *.log
 drivers
 !test/input.json
+
+# Go binary
+c2c2

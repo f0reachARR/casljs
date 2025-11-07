@@ -18,7 +18,51 @@ CASL2, COMET2 の JavaScript 実装です．
 
 ## コマンドライン版
 
-### c2c2.js
+### c2c2 (Go版) - 推奨
+
+* 状況: stable
+* Go言語で実装された高速なコマンドライン版です
+
+#### ビルド方法
+
+```bash
+go build -o c2c2 .
+```
+
+#### 使用方法
+
+```
+Usage: c2c2 [options] <casl2file> [input1 ...]
+
+Options:
+  -V          output the version number
+  -a          [casl2] show detailed info
+  -c          [casl2] apply casl2 only
+  -r          [comet2] run immediately
+  -n          [casl2/comet2] disable color messages
+  -q          [casl2/comet2] be quiet
+  -Q          [comet2] be QUIET! (implies -q and -r)
+```  
+
+```bash
+# 例：プログラムをアセンブル＆実行
+./c2c2 -n -r -q caslfile.cas
+
+# 例：事前に入力値を指定して実行
+./c2c2 -n -Q sample.cas 10 20 30
+```
+
+#### テスト
+
+```bash
+# Go テストの実行
+go test -v
+
+# すべてのサンプルをテスト (28個のテストケース)
+go test -v -run TestC2C2Samples
+```
+
+### c2c2.js (Node.js版)
 
 * 状況: stable
 ```
