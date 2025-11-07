@@ -12,3 +12,8 @@ test_results
 *.log
 drivers
 !test/input.json
+
+# Added by cargo
+
+/target
+Cargo.lock

@@ -1,0 +1,10 @@
+[package]
+name = "c2c2"
+version = "1.0.4"
+edition = "2021"
+
+[[bin]]
+name = "c2c2"
+path = "src/main.rs"
+
+[dependencies]
