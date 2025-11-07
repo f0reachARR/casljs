@@ -34,6 +34,9 @@ pub struct Comet2 {
     input_lines: Vec<String>,
     current_input: usize,
 
+    // Output buffer (for testing)
+    output_buffer: Vec<String>,
+
     // Options
     quiet: bool,
 }
@@ -55,8 +58,13 @@ impl Comet2 {
             memory,
             input_lines: inputs.to_vec(),
             current_input: 0,
+            output_buffer: Vec::new(),
             quiet,
         }
+    }
+
+    pub fn get_output(&self) -> String {
+        self.output_buffer.join("")
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -633,7 +641,7 @@ impl Comet2 {
     fn push(&mut self, x: u8) -> Result<()> {
         let ea = self.effective_address(x)?;
         self.sp = self.sp.wrapping_sub(1);
-        self.memory[self.sp as usize] = self.memory[ea as usize];
+        self.memory[self.sp as usize] = ea;  // Push the effective address itself, not memory[ea]
         Ok(())
     }
 
@@ -699,8 +707,10 @@ impl Comet2 {
                     self.current_input += 1;
 
                     if !self.quiet {
-                        print!("IN> {}\n", line);
+                        let output_line = format!("IN> {}\n", line);
+                        print!("{}", output_line);
                         io::stdout().flush().ok();
+                        self.output_buffer.push(output_line);
                     }
 
                     // Store characters in buffer
@@ -727,8 +737,10 @@ impl Comet2 {
                 self.sp = self.sp.wrapping_add(1);
 
                 let len = self.memory[len_addr as usize] as usize;
+                let mut output_line = String::new();
                 if !self.quiet {
                     print!("OUT> ");
+                    output_line.push_str("OUT> ");
                 }
 
                 for i in 0..len {
@@ -736,9 +748,15 @@ impl Comet2 {
                     if ch == 0 {
                         break;
                     }
-                    print!("{}", (ch as u8) as char);
+                    let c = (ch as u8) as char;
+                    print!("{}", c);
+                    output_line.push(c);
                 }
                 println!();
+                output_line.push('\n');
+                if !self.quiet {
+                    self.output_buffer.push(output_line);
+                }
                 io::stdout().flush().ok();
             }
             _ => {

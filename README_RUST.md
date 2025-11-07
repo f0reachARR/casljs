@@ -71,6 +71,25 @@ This Rust implementation is being developed without external crates (regex, clap
 
 ## Testing
 
+### Unit Tests
+
+Run the built-in unit tests:
+```bash
+cargo test --lib
+```
+
+### Integration Tests
+
+Run integration tests that verify sample programs match expected output:
+```bash
+cargo test --test integration_test
+```
+
+Note: Integration tests are a work in progress. Core functionality works but some complex sample programs requiring special library functions may not pass yet.
+
+### Python Test Suite
+
+The original Python test suite can also be used:
 ```bash
 cd test
 python3 -m pytest c2c2_test.py -v
