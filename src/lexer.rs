@@ -282,16 +282,10 @@ impl Lexer {
                 Ok(Token::Number(num))
             }
             Some(ch) if ch.is_ascii_digit() => {
-                // Check if it's a register (single digit)
-                let digit = ch as u8 - b'0';
-                if digit <= 7 && self.peek_ahead(1).map_or(true, |c| !c.is_ascii_alphanumeric()) {
-                    self.advance();
-                    Ok(Token::Register(digit))
-                } else {
-                    // It's a number
-                    let num = self.read_number()?;
-                    Ok(Token::Number(num))
-                }
+                // Always treat bare digits as numbers
+                // Registers must be written as GR0-GR7
+                let num = self.read_number()?;
+                Ok(Token::Number(num))
             }
             Some(ch) if Self::is_label_start(ch) => {
                 let ident = self.read_identifier();
@@ -357,32 +351,165 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenize_simple() {
-        let input = "MAIN START\n  LD GR1, DATA\n  RET\nDATA DC 10\n  END";
-        let mut lexer = Lexer::new(input);
-        let tokens = lexer.tokenize().unwrap();
+    fn test_label() {
+        let mut lexer = Lexer::new("MAIN");
+        assert_eq!(lexer.next_token().unwrap(), Token::Label("MAIN".to_string()));
 
-        assert!(tokens.len() > 0);
+        let mut lexer = Lexer::new("_test123");
+        assert_eq!(lexer.next_token().unwrap(), Token::Label("_test123".to_string()));
+
+        let mut lexer = Lexer::new("$var");
+        assert_eq!(lexer.next_token().unwrap(), Token::Label("$var".to_string()));
     }
 
     #[test]
-    fn test_immediate() {
-        let mut lexer = Lexer::new("#1234");
-        let token = lexer.next_token().unwrap();
-        assert_eq!(token, Token::Immediate(0x1234));
-    }
+    fn test_instruction() {
+        let mut lexer = Lexer::new("LD");
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("LD".to_string()));
 
-    #[test]
-    fn test_string() {
-        let mut lexer = Lexer::new("'Hello''World'");
-        let token = lexer.next_token().unwrap();
-        assert_eq!(token, Token::String("Hello'World".to_string()));
+        let mut lexer = Lexer::new("START");
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("START".to_string()));
+
+        let mut lexer = Lexer::new("RPUSH");
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("RPUSH".to_string()));
     }
 
     #[test]
     fn test_register() {
-        let mut lexer = Lexer::new("GR3");
-        let token = lexer.next_token().unwrap();
-        assert_eq!(token, Token::Register(3));
+        let mut lexer = Lexer::new("GR0");
+        assert_eq!(lexer.next_token().unwrap(), Token::Register(0));
+
+        let mut lexer = Lexer::new("GR7");
+        assert_eq!(lexer.next_token().unwrap(), Token::Register(7));
+
+        // Single digits are now treated as numbers, not registers
+        let mut lexer = Lexer::new("3");
+        assert_eq!(lexer.next_token().unwrap(), Token::Number(3));
+    }
+
+    #[test]
+    fn test_number() {
+        let mut lexer = Lexer::new("42");
+        assert_eq!(lexer.next_token().unwrap(), Token::Number(42));
+
+        let mut lexer = Lexer::new("+123");
+        assert_eq!(lexer.next_token().unwrap(), Token::Number(123));
+
+        let mut lexer = Lexer::new("-456");
+        assert_eq!(lexer.next_token().unwrap(), Token::Number(-456));
+    }
+
+    #[test]
+    fn test_immediate() {
+        let mut lexer = Lexer::new("#0000");
+        assert_eq!(lexer.next_token().unwrap(), Token::Immediate(0x0000));
+
+        let mut lexer = Lexer::new("#1234");
+        assert_eq!(lexer.next_token().unwrap(), Token::Immediate(0x1234));
+
+        let mut lexer = Lexer::new("#FFFF");
+        assert_eq!(lexer.next_token().unwrap(), Token::Immediate(0xFFFF));
+
+        let mut lexer = Lexer::new("#abcd");
+        assert_eq!(lexer.next_token().unwrap(), Token::Immediate(0xabcd));
+    }
+
+    #[test]
+    fn test_string() {
+        let mut lexer = Lexer::new("'Hello'");
+        assert_eq!(lexer.next_token().unwrap(), Token::String("Hello".to_string()));
+
+        let mut lexer = Lexer::new("'Hello''World'");
+        assert_eq!(lexer.next_token().unwrap(), Token::String("Hello'World".to_string()));
+
+        let mut lexer = Lexer::new("''");
+        assert_eq!(lexer.next_token().unwrap(), Token::String("".to_string()));
+    }
+
+    #[test]
+    fn test_literal() {
+        let mut lexer = Lexer::new("=10");
+        assert_eq!(lexer.next_token().unwrap(), Token::Literal("10".to_string()));
+
+        let mut lexer = Lexer::new("='test'");
+        assert_eq!(lexer.next_token().unwrap(), Token::Literal("'test'".to_string()));
+
+        let mut lexer = Lexer::new("=#1234");
+        assert_eq!(lexer.next_token().unwrap(), Token::Literal("#1234".to_string()));
+    }
+
+    #[test]
+    fn test_comment() {
+        let mut lexer = Lexer::new("; This is a comment");
+        assert_eq!(lexer.next_token().unwrap(), Token::Comment(" This is a comment".to_string()));
+    }
+
+    #[test]
+    fn test_separators() {
+        let mut lexer = Lexer::new(",");
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+
+        let mut lexer = Lexer::new(":");
+        assert_eq!(lexer.next_token().unwrap(), Token::Colon);
+    }
+
+    #[test]
+    fn test_complete_line() {
+        let input = "MAIN START\n  LD GR1, DATA\n  RET\n; comment\nDATA DC 10\n  END";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+
+        // Check that we get reasonable tokens
+        assert!(tokens.len() > 10);
+        assert_eq!(tokens[0].0, Token::Label("MAIN".to_string()));
+        assert_eq!(tokens[1].0, Token::Instruction("START".to_string()));
+    }
+
+    #[test]
+    fn test_instruction_with_operands() {
+        let input = "LD GR1, DATA, GR2";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("LD".to_string()));
+        assert_eq!(lexer.next_token().unwrap(), Token::Register(1));
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(lexer.next_token().unwrap(), Token::Label("DATA".to_string()));
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(lexer.next_token().unwrap(), Token::Register(2));
+    }
+
+    #[test]
+    fn test_dc_instruction() {
+        let input = "DC 'Hello', 10, #FFFF";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("DC".to_string()));
+        assert_eq!(lexer.next_token().unwrap(), Token::String("Hello".to_string()));
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(lexer.next_token().unwrap(), Token::Number(10));
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(lexer.next_token().unwrap(), Token::Immediate(0xFFFF));
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        let input = "  LD   GR1  ,  DATA  ";
+        let mut lexer = Lexer::new(input);
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Instruction("LD".to_string()));
+        assert_eq!(lexer.next_token().unwrap(), Token::Register(1));
+        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(lexer.next_token().unwrap(), Token::Label("DATA".to_string()));
+    }
+
+    #[test]
+    fn test_line_tracking() {
+        let input = "MAIN\nLD GR1, 10\nRET";
+        let mut lexer = Lexer::new(input);
+        let tokens = lexer.tokenize().unwrap();
+
+        assert_eq!(tokens[0].1, 1); // MAIN on line 1
+        assert!(tokens.iter().any(|(_, line)| *line == 2)); // Something on line 2
+        assert!(tokens.iter().any(|(_, line)| *line == 3)); // Something on line 3
     }
 }

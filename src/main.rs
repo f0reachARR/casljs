@@ -5,6 +5,8 @@
 mod lexer;
 mod ast;
 mod parser;
+mod assembler;
+mod emulator;
 
 use std::collections::HashMap;
 use std::env;
@@ -14,6 +16,8 @@ use std::process;
 
 use lexer::Lexer;
 use parser::Parser;
+use assembler::Assembler;
+use emulator::Comet2;
 
 const VERSION: &str = "1.0.4 KIT (Jan 23, 2025)";
 
@@ -230,23 +234,31 @@ fn assemble(source: &str, options: &Options) -> Result<(Vec<u16>, u16, u16)> {
         println!();
     }
 
-    // Code generation (stub)
-    // TODO: Implement full code generation
-    Err("Code generation not yet fully implemented - work in progress".to_string())
+    // Code generation
+    let assembler = Assembler::new(program);
+    let (binary, start_address, address_max) = assembler.assemble()
+        .map_err(|e| format!("Assembler error: {}", e))?;
+
+    if !options.opt_q && options.opt_a {
+        println!("=== Generated Binary ===");
+        println!("Start address: 0x{:04X}", start_address);
+        println!("Size: {} words", binary.len());
+        for (i, word) in binary.iter().enumerate() {
+            println!("{:04X}: {:04X}", i, word);
+        }
+        println!();
+    }
+
+    Ok((binary, start_address, address_max))
 }
 
 fn execute(
     memory: &[u16],
     start_address: u16,
-    address_max: u16,
+    _address_max: u16,
     inputs: &[String],
     options: &Options,
 ) -> Result<()> {
-    // Placeholder: This is a minimal stub
-    // Full implementation would include:
-    // - Instruction decode and execute loop
-    // - Register state management
-    // - I/O operations
-
-    Err("Execution not yet fully implemented - work in progress".to_string())
+    let mut comet2 = Comet2::new(memory, start_address, inputs, options.opt_q);
+    comet2.run()
 }

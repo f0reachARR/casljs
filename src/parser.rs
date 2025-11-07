@@ -386,14 +386,228 @@ mod tests {
     use super::*;
     use crate::lexer::Lexer;
 
-    #[test]
-    fn test_parse_simple() {
-        let input = "MAIN START\n  LD GR1, DATA\n  RET\nDATA DC 10\n  END";
+    fn parse_input(input: &str) -> Program {
         let mut lexer = Lexer::new(input);
         let tokens = lexer.tokenize().unwrap();
         let mut parser = Parser::new(tokens);
-        let program = parser.parse().unwrap();
+        parser.parse().unwrap()
+    }
 
-        assert!(program.lines.len() > 0);
+    #[test]
+    fn test_parse_start_end() {
+        let program = parse_input("MAIN START\n  END");
+        assert_eq!(program.lines.len(), 2);
+        assert_eq!(program.lines[0].label, Some("MAIN".to_string()));
+        assert!(matches!(program.lines[0].instruction, Some(Instruction::Start(None))));
+        assert!(matches!(program.lines[1].instruction, Some(Instruction::End)));
+    }
+
+    #[test]
+    fn test_parse_start_with_entry() {
+        let program = parse_input("MAIN START BEGIN\n  END");
+        assert_eq!(program.lines[0].label, Some("MAIN".to_string()));
+        assert!(matches!(program.lines[0].instruction,
+            Some(Instruction::Start(Some(ref s))) if s == "BEGIN"));
+    }
+
+    #[test]
+    fn test_parse_no_operand() {
+        let program = parse_input("  NOP\n  RET\n  END");
+        assert!(matches!(program.lines[0].instruction, Some(Instruction::NoOperand(_))));
+        assert!(matches!(program.lines[1].instruction, Some(Instruction::NoOperand(_))));
+    }
+
+    #[test]
+    fn test_parse_pop() {
+        let program = parse_input("  POP GR1\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::OneReg(_, reg)) => {
+                assert_eq!(reg.to_u8(), 1);
+            }
+            _ => panic!("Expected OneReg instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ld_reg_addr() {
+        let program = parse_input("  LD GR1, DATA\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::RegAddr(_, reg, addr, idx)) => {
+                assert_eq!(reg.to_u8(), 1);
+                assert!(matches!(addr, Address::Label(_)));
+                assert!(idx.is_none());
+            }
+            _ => panic!("Expected RegAddr instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ld_with_index() {
+        let program = parse_input("  LD GR1, DATA, GR2\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::RegAddr(_, reg, _, Some(idx))) => {
+                assert_eq!(reg.to_u8(), 1);
+                assert_eq!(idx.to_u8(), 2);
+            }
+            _ => panic!("Expected RegAddr with index"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ld_two_reg() {
+        let program = parse_input("  LD GR1, GR2\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::TwoReg(_, reg1, reg2)) => {
+                assert_eq!(reg1.to_u8(), 1);
+                assert_eq!(reg2.to_u8(), 2);
+            }
+            _ => panic!("Expected TwoReg instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_immediate() {
+        let program = parse_input("  LAD GR1, #1234\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::RegAddr(_, _, Address::Immediate(imm), _)) => {
+                assert_eq!(*imm, 0x1234);
+            }
+            _ => panic!("Expected immediate address"),
+        }
+    }
+
+    #[test]
+    fn test_parse_literal() {
+        let program = parse_input("  LD GR1, =10\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::RegAddr(_, _, Address::Literal(lit), _)) => {
+                assert_eq!(lit, "10");
+            }
+            _ => panic!("Expected literal address"),
+        }
+    }
+
+    #[test]
+    fn test_parse_jump() {
+        let program = parse_input("  JUMP LABEL\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::Addr(_, addr, idx)) => {
+                assert!(matches!(addr, Address::Label(_)));
+                assert!(idx.is_none());
+            }
+            _ => panic!("Expected Addr instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_ds() {
+        let program = parse_input("BUF DS 10\n  END");
+        assert_eq!(program.lines[0].label, Some("BUF".to_string()));
+        match &program.lines[0].instruction {
+            Some(Instruction::Ds(count)) => {
+                assert_eq!(*count, 10);
+            }
+            _ => panic!("Expected DS instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dc_numbers() {
+        let program = parse_input("DATA DC 10, 20, -5\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::Dc(values)) => {
+                assert_eq!(values.len(), 3);
+                assert!(matches!(values[0], DcValue::Number(10)));
+                assert!(matches!(values[1], DcValue::Number(20)));
+                assert!(matches!(values[2], DcValue::Number(-5)));
+            }
+            _ => panic!("Expected DC instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dc_string() {
+        let program = parse_input("MSG DC 'Hello'\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::Dc(values)) => {
+                assert_eq!(values.len(), 1);
+                match &values[0] {
+                    DcValue::String(s) => assert_eq!(s, "Hello"),
+                    _ => panic!("Expected string value"),
+                }
+            }
+            _ => panic!("Expected DC instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dc_mixed() {
+        let program = parse_input("DATA DC 10, 'test', #FFFF\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::Dc(values)) => {
+                assert_eq!(values.len(), 3);
+                assert!(matches!(values[0], DcValue::Number(10)));
+                assert!(matches!(values[1], DcValue::String(_)));
+                assert!(matches!(values[2], DcValue::Immediate(0xFFFF)));
+            }
+            _ => panic!("Expected DC instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_in_out() {
+        let program = parse_input("  IN BUF, LEN\n  OUT BUF, LEN\n  END");
+        match &program.lines[0].instruction {
+            Some(Instruction::In(buf, len)) => {
+                assert_eq!(buf, "BUF");
+                assert_eq!(len, "LEN");
+            }
+            _ => panic!("Expected IN instruction"),
+        }
+        match &program.lines[1].instruction {
+            Some(Instruction::Out(buf, len)) => {
+                assert_eq!(buf, "BUF");
+                assert_eq!(len, "LEN");
+            }
+            _ => panic!("Expected OUT instruction"),
+        }
+    }
+
+    #[test]
+    fn test_parse_rpush_rpop() {
+        let program = parse_input("  RPUSH\n  RPOP\n  END");
+        assert!(matches!(program.lines[0].instruction, Some(Instruction::Rpush)));
+        assert!(matches!(program.lines[1].instruction, Some(Instruction::Rpop)));
+    }
+
+    #[test]
+    fn test_parse_label_only() {
+        let program = parse_input("LOOP\n  NOP\n  END");
+        assert_eq!(program.lines[0].label, Some("LOOP".to_string()));
+        assert!(program.lines[0].instruction.is_none());
+    }
+
+    #[test]
+    fn test_parse_with_comments() {
+        let program = parse_input("; Comment\nMAIN START ; inline comment\n  RET\n  END");
+        assert_eq!(program.lines[0].label, Some("MAIN".to_string()));
+        assert!(program.lines.len() >= 3);
+    }
+
+    #[test]
+    fn test_parse_complete_program() {
+        let input = r#"
+MAIN START
+  LAD GR1, 10
+  LAD GR2, 20
+  ADDA GR1, GR2
+  ST GR1, SUM
+  RET
+SUM DC 0
+  END
+"#;
+        let program = parse_input(input);
+        assert!(program.lines.len() >= 6);
+        assert_eq!(program.lines[0].label, Some("MAIN".to_string()));
     }
 }
