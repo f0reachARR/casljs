@@ -317,9 +317,8 @@ func main() {
 			if len(inputBuffer) > 0 {
 				input = inputBuffer[0]
 				inputBuffer = inputBuffer[1:]
-				if !*optQuietRun {
-					fmt.Printf("%s%s\n", prompt, input)
-				}
+				// Always print the input value when using buffered input
+				fmt.Printf("%s%s\n", prompt, input)
 			} else {
 				if prompt != "" {
 					fmt.Print(prompt)
