@@ -10,3 +10,9 @@ c2c2.exe
 *.test
 *.out
 coverage.txt
+
+# VS Code extension
+vscode-casl2-debug/node_modules/
+vscode-casl2-debug/out/
+vscode-casl2-debug/*.vsix
+vscode-casl2-debug/pnpm-lock.yaml

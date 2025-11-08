@@ -1,0 +1,104 @@
+{
+  "name": "CASL2",
+  "scopeName": "source.casl2",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#instructions"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#registers"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.casl2",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.function.casl2",
+          "match": "^[A-Za-z_.$%][A-Za-z0-9_.$%]*(?=\\s|$)"
+        }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        {
+          "name": "keyword.control.casl2",
+          "match": "\\b(START|END|RET|NOP)\\b"
+        },
+        {
+          "name": "keyword.operator.casl2",
+          "match": "\\b(LD|ST|LAD|ADDA|SUBA|ADDL|SUBL|MULA|DIVA|MULL|DIVL|AND|OR|XOR|CPA|CPL|SLA|SRA|SLL|SRL|JMI|JNZ|JZE|JUMP|JPL|JOV|PUSH|POP|CALL|SVC)\\b"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.other.casl2",
+          "match": "\\b(DS|DC|IN|OUT|RPUSH|RPOP)\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.casl2",
+          "match": "\\bGR[0-7]\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.casl2",
+          "match": "#[0-9A-Fa-f]+"
+        },
+        {
+          "name": "constant.numeric.decimal.casl2",
+          "match": "\\b[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.immediate.casl2",
+          "match": "=[0-9]+"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.casl2",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.casl2",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

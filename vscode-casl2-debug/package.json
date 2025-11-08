@@ -1,0 +1,145 @@
+{
+  "name": "casl2-debug",
+  "displayName": "CASL2 Debugger",
+  "version": "1.0.0",
+  "publisher": "casl2",
+  "description": "Debug Adapter for CASL2/COMET2 programs",
+  "author": {
+    "name": "CASL2 Contributors"
+  },
+  "license": "GPL-3.0",
+  "keywords": [
+    "debuggers",
+    "casl2",
+    "comet2",
+    "assembly"
+  ],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/f0reachARR/casljs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/f0reachARR/casljs/issues"
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "pnpm vsce package",
+    "publish": "pnpm vsce publish"
+  },
+  "dependencies": {
+    "@vscode/debugadapter": "^1.65.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.3"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onDebugResolve:casl2",
+    "onDebugDynamicConfigurations:casl2"
+  ],
+  "contributes": {
+    "breakpoints": [
+      {
+        "language": "casl2"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "casl2",
+        "languages": [
+          "casl2"
+        ],
+        "label": "CASL2 Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to a CASL2 source file.",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              },
+              "debugServer": {
+                "type": "number",
+                "description": "Port number for the debug adapter server.",
+                "default": 4711
+              },
+              "c2c2Path": {
+                "type": "string",
+                "description": "Path to c2c2 executable.",
+                "default": "c2c2"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "casl2",
+            "request": "launch",
+            "name": "Debug CASL2 Program",
+            "program": "${file}",
+            "stopOnEntry": true,
+            "debugServer": 4711,
+            "c2c2Path": "c2c2"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "CASL2 Debug: Launch",
+            "description": "A new configuration for debugging a CASL2 program.",
+            "body": {
+              "type": "casl2",
+              "request": "launch",
+              "name": "Debug CASL2 Program",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true,
+              "debugServer": 4711,
+              "c2c2Path": "c2c2"
+            }
+          }
+        ]
+      }
+    ],
+    "languages": [
+      {
+        "id": "casl2",
+        "aliases": [
+          "CASL2",
+          "casl2"
+        ],
+        "extensions": [
+          ".cas"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "casl2",
+        "scopeName": "source.casl2",
+        "path": "./syntaxes/casl2.tmLanguage.json"
+      }
+    ]
+  }
+}

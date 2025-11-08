@@ -53,6 +53,19 @@ c2c2は、エディタやIDEからのデバッグを可能にするDebug Adapter
 
 2. エディタ/IDEからTCPポート4711経由でDAPプロトコルを使用してデバッグセッションを開始
 
+#### VS Code拡張機能
+
+VS Codeユーザー向けに、専用の拡張機能を提供しています：
+
+```bash
+cd vscode-casl2-debug
+pnpm install
+pnpm run compile
+pnpm run package
+```
+
+詳細は [vscode-casl2-debug/README.md](vscode-casl2-debug/README.md) を参照してください。
+
 #### サポートされる機能
 
 - プログラムの起動 (launch)
