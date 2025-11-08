@@ -1,0 +1,13 @@
+; Simple CASL2 program to demonstrate debugging
+; This program adds two numbers and stores the result
+
+MAIN    START
+        LD      GR0, NUM1       ; Load first number into GR0
+        LD      GR1, NUM2       ; Load second number into GR1
+        ADDA    GR0, GR1        ; Add GR1 to GR0
+        ST      GR0, RESULT     ; Store result
+        RET                     ; Return
+NUM1    DC      10              ; First number
+NUM2    DC      20              ; Second number
+RESULT  DS      1               ; Result storage
+        END

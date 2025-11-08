@@ -1,0 +1,15 @@
+{
+  // VS Code launch configuration example for CASL2/COMET2 debugging
+  // Place this file in your project's .vscode/launch.json
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "casl2",
+      "request": "launch",
+      "name": "Debug CASL2 Program",
+      "program": "${file}",
+      "stopOnEntry": true,
+      "debugServer": 4711
+    }
+  ]
+}
