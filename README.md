@@ -26,6 +26,7 @@ Options:
   -n          [casl2/comet2] disable color messages
   -q          [casl2/comet2] be quiet
   -Q          [comet2] be QUIET! (implies -q and -r)
+  -dap port   [dap] start Debug Adapter Protocol server on specified TCP port
 ```  
 
 ```bash
@@ -34,7 +35,51 @@ Options:
 
 # 例：事前に入力値を指定して実行
 ./c2c2 -n -Q sample.cas 10 20 30
+
+# 例：Debug Adapter Protocolサーバーを起動（ポート4711で待機）
+./c2c2 -dap 4711
 ```
+
+### Debug Adapter Protocol (DAP) サポート
+
+c2c2は、エディタやIDEからのデバッグを可能にするDebug Adapter Protocolをサポートしています。
+
+#### 使用方法
+
+1. DAPサーバーを起動:
+```bash
+./c2c2 -dap 4711
+```
+
+2. エディタ/IDEからTCPポート4711経由でDAPプロトコルを使用してデバッグセッションを開始
+
+#### VS Code拡張機能
+
+VS Codeユーザー向けに、専用の拡張機能を提供しています：
+
+```bash
+cd vscode-casl2-debug
+pnpm install
+pnpm run compile
+pnpm run package
+```
+
+詳細は [vscode-casl2-debug/README.md](vscode-casl2-debug/README.md) を参照してください。
+
+#### サポートされる機能
+
+- プログラムの起動 (launch)
+- ステップ実行 (step, stepIn, stepOut)
+- 継続実行 (continue)
+- ブレークポイントの設定
+- レジスタの検査 (PC, FR, GR0-GR7, SP)
+- スタックトレースの表示
+- 一時停止 (pause)
+
+#### 注意事項
+
+- 標準入出力は IN/OUT 命令のために使用されます
+- DAPモード時は通常のインタラクティブモードは使用できません
 
 ### テスト
 

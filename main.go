@@ -68,6 +68,7 @@ var (
 	optQuiet    = flag.Bool("q", false, "[casl2/comet2] be quiet")
 	optQuietRun = flag.Bool("Q", false, "[comet2] be QUIET! (implies -q and -r)")
 	optVersion  = flag.Bool("V", false, "output the version number")
+	optDAPPort  = flag.Int("dap", 0, "[dap] start Debug Adapter Protocol server on specified TCP port")
 )
 
 // Global variables
@@ -198,6 +199,15 @@ func main() {
 	if *optVersion {
 		fmt.Println(VERSION)
 		os.Exit(0)
+	}
+
+	// If DAP mode is enabled, start DAP server instead of normal mode
+	if *optDAPPort > 0 {
+		if err := StartDAPServer(*optDAPPort); err != nil {
+			fmt.Fprintf(os.Stderr, "DAP server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if *optQuietRun {
