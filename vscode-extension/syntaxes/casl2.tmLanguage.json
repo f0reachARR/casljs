@@ -1,0 +1,137 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CASL2",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#instructions"
+    },
+    {
+      "include": "#registers"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.casl2",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.casl2",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.casl2",
+              "match": "''"
+            }
+          ]
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.casl2",
+          "match": "^[a-zA-Z_$%\\.][0-9a-zA-Z_$%\\.]*(?=\\s|$)"
+        }
+      ]
+    },
+    "instructions": {
+      "patterns": [
+        {
+          "name": "keyword.control.casl2",
+          "match": "\\b(START|END)\\b"
+        },
+        {
+          "name": "keyword.control.jump.casl2",
+          "match": "\\b(JMI|JNZ|JZE|JUMP|JPL|JOV|CALL|RET)\\b"
+        },
+        {
+          "name": "keyword.control.stack.casl2",
+          "match": "\\b(PUSH|POP|RPUSH|RPOP)\\b"
+        },
+        {
+          "name": "keyword.operator.arithmetic.casl2",
+          "match": "\\b(ADDA|SUBA|ADDL|SUBL|MULA|DIVA|MULL|DIVL)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.casl2",
+          "match": "\\b(AND|OR|XOR|SLA|SRA|SLL|SRL)\\b"
+        },
+        {
+          "name": "keyword.operator.compare.casl2",
+          "match": "\\b(CPA|CPL)\\b"
+        },
+        {
+          "name": "keyword.other.load-store.casl2",
+          "match": "\\b(LD|ST|LAD)\\b"
+        },
+        {
+          "name": "keyword.other.directive.casl2",
+          "match": "\\b(DS|DC)\\b"
+        },
+        {
+          "name": "keyword.other.io.casl2",
+          "match": "\\b(IN|OUT)\\b"
+        },
+        {
+          "name": "keyword.other.casl2",
+          "match": "\\b(NOP|SVC)\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.casl2",
+          "match": "\\b[Gg][Rr][0-7]\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.casl2",
+          "match": "#[0-9a-fA-F]+"
+        },
+        {
+          "name": "constant.numeric.decimal.casl2",
+          "match": "\\b[+-]?[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.literal.casl2",
+          "match": "="
+        },
+        {
+          "name": "punctuation.separator.comma.casl2",
+          "match": ","
+        }
+      ]
+    }
+  },
+  "scopeName": "source.casl2"
+}

@@ -7,6 +7,13 @@ perl/comet2
 # Go binaries and build artifacts
 c2c2
 c2c2.exe
+casl2-lsp
+casl2-lsp.exe
 *.test
 *.out
 coverage.txt
+
+# VSCode extension build artifacts
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
