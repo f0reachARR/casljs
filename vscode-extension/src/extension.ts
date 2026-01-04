@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import {
     LanguageClient,
@@ -27,7 +28,6 @@ export function activate(context: vscode.ExtensionContext) {
     if (!path.isAbsolute(serverCommand)) {
         // First, try to find it in the extension's directory
         const extensionServerPath = context.asAbsolutePath(path.join('bin', serverCommand));
-        const fs = require('fs');
         if (fs.existsSync(extensionServerPath)) {
             serverCommand = extensionServerPath;
         }
