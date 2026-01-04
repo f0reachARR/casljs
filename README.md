@@ -56,6 +56,45 @@ go test -v -race -coverprofile=coverage.txt -covermode=atomic
 - **依存関係なし**: 単一のバイナリファイルで動作
 - **型安全**: Go の型システムによる安全性
 - **テスト**: 28個のテストケースで検証済み
+- **LSP対応**: VSCode拡張によるエディタサポート
+
+## Language Server Protocol (LSP) 対応
+
+CASL2用のLanguage Serverを実装しています。VSCode拡張機能を使用すると、以下の機能が利用できます：
+
+- **シンタックスハイライト**: CASL2アセンブリ言語の構文強調表示
+- **インテリセンス**: 命令、レジスタ、ラベルの自動補完
+- **ホバー情報**: 命令にカーソルを合わせると説明を表示
+- **定義へジャンプ**: ラベルの定義位置へジャンプ
+- **ドキュメントシンボル**: アウトラインビューでラベル一覧を表示
+- **診断機能**: リアルタイムの構文エラーチェック
+
+### Language Serverのビルド
+
+```bash
+go build -o casl2-lsp ./cmd/casl2-lsp
+```
+
+### VSCode拡張機能のインストール
+
+詳細は [vscode-extension/README.md](vscode-extension/README.md) を参照してください。
+
+1. 拡張機能をビルド:
+```bash
+cd vscode-extension
+npm install
+npm run compile
+```
+
+2. VSCodeで開発モードで実行:
+- `vscode-extension`フォルダをVSCodeで開く
+- F5キーを押して新しいVSCodeウィンドウで拡張機能を起動
+
+3. VSIXパッケージからインストール:
+```bash
+npx vsce package
+code --install-extension casl2-language-support-1.0.0.vsix
+```
 
 ## 独自拡張(CASL2)
 
