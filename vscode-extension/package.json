@@ -1,0 +1,71 @@
+{
+  "name": "casl2-language-support",
+  "displayName": "CASL2 Language Support",
+  "description": "Language support for CASL2 assembly language with LSP integration",
+  "version": "1.0.0",
+  "publisher": "casl2",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:casl2"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "casl2",
+        "aliases": [
+          "CASL2",
+          "casl2"
+        ],
+        "extensions": [
+          ".cas",
+          ".casl",
+          ".casl2"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "casl2",
+        "scopeName": "source.casl2",
+        "path": "./syntaxes/casl2.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "CASL2 Language Server",
+      "properties": {
+        "casl2.languageServer.path": {
+          "type": "string",
+          "default": "casl2-lsp",
+          "description": "Path to the CASL2 language server executable"
+        },
+        "casl2.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable the CASL2 language server"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}
