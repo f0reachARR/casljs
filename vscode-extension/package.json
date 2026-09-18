@@ -1,0 +1,71 @@
+{
+  "name": "casl2-debug",
+  "displayName": "CASL2 Debug",
+  "description": "Debug CASL2 programs with c2c2",
+  "version": "0.1.0",
+  "publisher": "f0reacharr",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebug:casl2"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "casl2",
+        "aliases": ["CASL2"],
+        "extensions": [".cas"]
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "casl2",
+        "label": "CASL2 (c2c2)",
+        "languages": ["casl2"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the CASL2 source file"
+              },
+              "c2c2Path": {
+                "type": "string",
+                "description": "Path to the c2c2 executable",
+                "default": "c2c2"
+              },
+              "port": {
+                "type": "number",
+                "description": "TCP port for the debug adapter"
+              },
+              "input": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Values supplied to CASL2 IN instructions"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "casl2",
+            "request": "launch",
+            "name": "Debug CASL2",
+            "program": "${file}",
+            "c2c2Path": "c2c2"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --check extension.js"
+  },
+  "license": "GPL-3.0-or-later"
+}
