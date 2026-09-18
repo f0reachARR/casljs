@@ -170,14 +170,24 @@ func TestDAPPauseStopsRunningProgram(t *testing.T) {
 
 	sendDAPRequest(t, client, 1, "continue", map[string]interface{}{"threadId": dapThreadID})
 	requireDAPMessage(t, reader, "response", "continue")
-	sendDAPRequest(t, client, 2, "pause", map[string]interface{}{"threadId": dapThreadID})
+	sendDAPRequest(t, client, 2, "continue", map[string]interface{}{"threadId": dapThreadID})
+	alreadyRunning := requireDAPMessage(t, reader, "response", "continue")
+	if alreadyRunning["success"].(bool) {
+		t.Fatal("second continue unexpectedly succeeded")
+	}
+	sendDAPRequest(t, client, 3, "setBreakpoints", map[string]interface{}{
+		"source":      map[string]string{"path": source + ".other"},
+		"breakpoints": []map[string]int{{"line": 2}},
+	})
+	requireDAPMessage(t, reader, "response", "setBreakpoints")
+	sendDAPRequest(t, client, 4, "pause", map[string]interface{}{"threadId": dapThreadID})
 	requireDAPMessage(t, reader, "response", "pause")
 	stopped := requireDAPMessage(t, reader, "event", "stopped")
 	if reason := stopped["body"].(map[string]interface{})["reason"]; reason != "pause" {
 		t.Fatalf("stopped reason = %v, want pause", reason)
 	}
 
-	sendDAPRequest(t, client, 3, "disconnect", map[string]interface{}{})
+	sendDAPRequest(t, client, 5, "disconnect", map[string]interface{}{})
 	requireDAPMessage(t, reader, "response", "disconnect")
 	if err := <-done; err != nil {
 		t.Fatal(err)

@@ -38,8 +38,21 @@ type dapAdapter struct {
 	state       []int
 	breakpoints map[int]bool
 	input       *bufio.Scanner
+	inputResult chan dapInputResult
 	mutex       sync.Mutex
 	cancel      chan string
+	breakMutex  sync.RWMutex
+}
+
+type dapInputResult struct {
+	text string
+	ok   bool
+}
+
+type dapExecutionCancelled string
+
+func (err dapExecutionCancelled) Error() string {
+	return string(err)
 }
 
 func serveDAP(port int, source string, asm *AssemblerState, memory []uint16, machineState []int) error {
@@ -145,15 +158,9 @@ func (adapter *dapAdapter) handle(request dapRequest) (bool, error) {
 	case "variables":
 		return true, adapter.variables(request)
 	case "continue":
-		if err := adapter.protocol.respond(request, true, map[string]bool{"allThreadsContinued": true}, ""); err != nil {
-			return true, err
-		}
-		return true, adapter.startExecution(adapter.continueExecution)
+		return true, adapter.startExecution(request, map[string]bool{"allThreadsContinued": true}, adapter.continueExecution)
 	case "next", "stepIn":
-		if err := adapter.protocol.respond(request, true, nil, ""); err != nil {
-			return true, err
-		}
-		return true, adapter.startExecution(adapter.stepSourceLine)
+		return true, adapter.startExecution(request, nil, adapter.stepSourceLine)
 	case "pause":
 		if err := adapter.protocol.respond(request, true, nil, ""); err != nil {
 			return true, err
@@ -181,7 +188,7 @@ func (adapter *dapAdapter) setBreakpoints(request dapRequest) error {
 		return fmt.Errorf("invalid setBreakpoints arguments: %w", err)
 	}
 
-	adapter.breakpoints = make(map[int]bool)
+	newBreakpoints := make(map[int]bool)
 	results := make([]interface{}, 0, len(arguments.Breakpoints))
 	sourceMatches := sameFile(arguments.Source.Path, adapter.source)
 	for _, requested := range arguments.Breakpoints {
@@ -190,7 +197,7 @@ func (adapter *dapAdapter) setBreakpoints(request dapRequest) error {
 			verified = false
 		}
 		if verified {
-			adapter.breakpoints[address] = true
+			newBreakpoints[address] = true
 		}
 		result := map[string]interface{}{"verified": verified, "line": line}
 		if !verified {
@@ -198,6 +205,9 @@ func (adapter *dapAdapter) setBreakpoints(request dapRequest) error {
 		}
 		results = append(results, result)
 	}
+	adapter.breakMutex.Lock()
+	adapter.breakpoints = newBreakpoints
+	adapter.breakMutex.Unlock()
 	return adapter.protocol.respond(request, true, map[string]interface{}{"breakpoints": results}, "")
 }
 
@@ -217,7 +227,7 @@ func (adapter *dapAdapter) addressForLine(requestedLine int) (int, int, bool) {
 	return bestAddress, bestLine, bestAddress >= 0
 }
 
-func (adapter *dapAdapter) startExecution(execute func(<-chan string) error) error {
+func (adapter *dapAdapter) startExecution(request dapRequest, responseBody interface{}, execute func(<-chan string) error) error {
 	adapter.mutex.Lock()
 	if adapter.cancel != nil {
 		adapter.mutex.Unlock()
@@ -227,15 +237,23 @@ func (adapter *dapAdapter) startExecution(execute func(<-chan string) error) err
 	adapter.cancel = cancel
 	adapter.mutex.Unlock()
 
+	if err := adapter.protocol.respond(request, true, responseBody, ""); err != nil {
+		adapter.finishExecution(cancel)
+		return err
+	}
 	go func() {
 		_ = execute(cancel)
-		adapter.mutex.Lock()
-		if adapter.cancel == cancel {
-			adapter.cancel = nil
-		}
-		adapter.mutex.Unlock()
+		adapter.finishExecution(cancel)
 	}()
 	return nil
+}
+
+func (adapter *dapAdapter) finishExecution(cancel <-chan string) {
+	adapter.mutex.Lock()
+	if adapter.cancel == cancel {
+		adapter.cancel = nil
+	}
+	adapter.mutex.Unlock()
 }
 
 func (adapter *dapAdapter) cancelExecution(reason string) {
@@ -253,16 +271,22 @@ func (adapter *dapAdapter) cancelExecution(reason string) {
 func (adapter *dapAdapter) continueExecution(cancel <-chan string) error {
 	for {
 		if stopped, err := adapter.cancelled(cancel); stopped {
+			adapter.finishExecution(cancel)
 			return err
 		}
-		terminated, err := adapter.executeInstruction()
+		terminated, err := adapter.executeInstruction(cancel)
 		if err != nil {
-			return adapter.executionError(err)
+			return adapter.finishWithError(cancel, err)
 		}
 		if terminated {
+			adapter.finishExecution(cancel)
 			return adapter.protocol.event("terminated", nil)
 		}
-		if adapter.breakpoints[adapter.state[PC]] {
+		adapter.breakMutex.RLock()
+		atBreakpoint := adapter.breakpoints[adapter.state[PC]]
+		adapter.breakMutex.RUnlock()
+		if atBreakpoint {
+			adapter.finishExecution(cancel)
 			return adapter.stopped("breakpoint")
 		}
 	}
@@ -272,17 +296,20 @@ func (adapter *dapAdapter) stepSourceLine(cancel <-chan string) error {
 	startFile, startLine := adapter.sourceLocation(adapter.state[PC])
 	for {
 		if stopped, err := adapter.cancelled(cancel); stopped {
+			adapter.finishExecution(cancel)
 			return err
 		}
-		terminated, err := adapter.executeInstruction()
+		terminated, err := adapter.executeInstruction(cancel)
 		if err != nil {
-			return adapter.executionError(err)
+			return adapter.finishWithError(cancel, err)
 		}
 		if terminated {
+			adapter.finishExecution(cancel)
 			return adapter.protocol.event("terminated", nil)
 		}
 		file, line := adapter.sourceLocation(adapter.state[PC])
 		if file != startFile || line != startLine {
+			adapter.finishExecution(cancel)
 			return adapter.stopped("step")
 		}
 	}
@@ -300,7 +327,7 @@ func (adapter *dapAdapter) cancelled(cancel <-chan string) (bool, error) {
 	}
 }
 
-func (adapter *dapAdapter) executeInstruction() (bool, error) {
+func (adapter *dapAdapter) executeInstruction(cancel <-chan string) (bool, error) {
 	stopForInput, err := stepExec(adapter.memory, adapter.state)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "Program finished") {
@@ -314,15 +341,44 @@ func (adapter *dapAdapter) executeInstruction() (bool, error) {
 			text = inputBuffer[0]
 			inputBuffer = inputBuffer[1:]
 		} else {
-			if !adapter.input.Scan() {
+			if adapter.inputResult == nil {
+				adapter.inputResult = make(chan dapInputResult, 1)
+				result := adapter.inputResult
+				go func() {
+					ok := adapter.input.Scan()
+					result <- dapInputResult{text: adapter.input.Text(), ok: ok}
+				}()
+			}
+			select {
+			case result := <-adapter.inputResult:
+				adapter.inputResult = nil
+				if !result.ok {
+					return true, nil
+				}
+				text = result.text
+			case reason := <-cancel:
+				return false, dapExecutionCancelled(reason)
+			}
+			if text == "" && adapter.input.Err() != nil {
 				return true, nil
 			}
-			text = adapter.input.Text()
 		}
 		execIn(adapter.memory, adapter.state, text)
 		inputMode = INPUT_MODE_CMD
 	}
 	return false, nil
+}
+
+func (adapter *dapAdapter) finishWithError(cancel <-chan string, err error) error {
+	adapter.finishExecution(cancel)
+	var cancelled dapExecutionCancelled
+	if errors.As(err, &cancelled) {
+		if cancelled == "disconnect" {
+			return nil
+		}
+		return adapter.stopped(string(cancelled))
+	}
+	return adapter.executionError(err)
 }
 
 func (adapter *dapAdapter) executionError(err error) error {

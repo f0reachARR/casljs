@@ -10,6 +10,9 @@ async function activate(context) {
     async createDebugAdapterDescriptor(session) {
       const config = session.configuration;
       const port = config.port || await availablePort();
+      if (config.port) {
+        await ensurePortAvailable(port);
+      }
       const executable = config.c2c2Path || 'c2c2';
       const args = ['-n', '-q', `-dap-port=${port}`, config.program, ...(config.input || [])];
       const terminal = vscode.window.createTerminal({
@@ -26,6 +29,14 @@ async function activate(context) {
   context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('casl2', factory));
   context.subscriptions.push(vscode.window.onDidCloseTerminal(terminal => terminals.delete(terminal)));
   context.subscriptions.push({ dispose: () => terminals.forEach(terminal => terminal.dispose()) });
+}
+
+function ensurePortAvailable(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', () => reject(new Error(`TCP port ${port} is already in use`)));
+    server.listen(port, '127.0.0.1', () => server.close(error => error ? reject(error) : resolve()));
+  });
 }
 
 function availablePort() {
