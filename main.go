@@ -68,6 +68,7 @@ var (
 	optQuiet    = flag.Bool("q", false, "[casl2/comet2] be quiet")
 	optQuietRun = flag.Bool("Q", false, "[comet2] be QUIET! (implies -q and -r)")
 	optVersion  = flag.Bool("V", false, "output the version number")
+	optDAPPort  = flag.Int("dap-port", 0, "[comet2] listen for Debug Adapter Protocol on this TCP port")
 )
 
 // Global variables
@@ -204,6 +205,10 @@ func main() {
 		*optQuiet = true
 		*optRun = true
 	}
+	if *optDAPPort != 0 {
+		*optQuiet = true
+		*optNoColor = true
+	}
 
 	args := flag.Args()
 	if len(args) < 1 {
@@ -243,6 +248,14 @@ func main() {
 	comet2startAddress = uint16(expandLabel(asmState.symtbl, startLabel))
 
 	state = []int{int(comet2startAddress), FR_PLUS, 0, 0, 0, 0, 0, 0, 0, 0, STACK_TOP}
+
+	if *optDAPPort != 0 {
+		if err := serveDAP(*optDAPPort, inputFilepath, asmState, comet2mem, state); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if !*optQuiet {
 		printGreen(`   __________  __  _______________   ________
@@ -310,7 +323,7 @@ func main() {
 		} else if inputMode == INPUT_MODE_IN {
 			var input string
 			prompt := ""
-			if !*optQuietRun {
+			if !*optQuietRun && *optDAPPort == 0 {
 				prompt = colorIGreen("IN") + "> "
 			}
 
@@ -397,7 +410,7 @@ func cometPrint(msg string) {
 
 func cometOut(msg string) {
 	prefix := ""
-	if !*optQuietRun {
+	if !*optQuietRun && *optDAPPort == 0 {
 		prefix = colorIRed("OUT") + "> "
 	}
 	if !strings.HasSuffix(msg, "\n") {
@@ -487,6 +500,6 @@ func memPut(memory []uint16, pc int, val int) {
 	if pc < 0 || pc >= len(memory) {
 		return
 	}
-	
+
 	memory[pc] = uint16(val & 0xffff)
 }

@@ -26,6 +26,8 @@ Options:
   -n          [casl2/comet2] disable color messages
   -q          [casl2/comet2] be quiet
   -Q          [comet2] be QUIET! (implies -q and -r)
+  -dap-port int
+              [comet2] listen for Debug Adapter Protocol on this TCP port
 ```  
 
 ```bash
@@ -35,6 +37,20 @@ Options:
 # 例：事前に入力値を指定して実行
 ./c2c2 -n -Q sample.cas 10 20 30
 ```
+
+### デバッグアダプター
+
+`-dap-port` を指定すると、c2c2 はlocalhostの指定TCPポートでDebug Adapter
+Protocol (DAP)クライアントを待ち受けます。DAP通信にはTCPを使用するため、
+標準入力と標準出力は従来どおりCASL2の `IN` / `OUT` 命令に使用できます。
+
+```bash
+./c2c2 -dap-port 4711 program.cas
+```
+
+ソースブレークポイント、続行、ステップ実行、コールスタック、およびレジスタ表示に
+対応しています。VS Code用拡張機能は
+[`vscode-extension`](vscode-extension) にあります。
 
 ### テスト
 
