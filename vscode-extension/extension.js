@@ -1,10 +1,9 @@
 'use strict';
 
-const childProcess = require('child_process');
 const net = require('net');
 const vscode = require('vscode');
 
-const processes = new Set();
+const terminals = new Set();
 
 async function activate(context) {
   const factory = {
@@ -13,15 +12,20 @@ async function activate(context) {
       const port = config.port || await availablePort();
       const executable = config.c2c2Path || 'c2c2';
       const args = ['-n', '-q', `-dap-port=${port}`, config.program, ...(config.input || [])];
-      const process = childProcess.spawn(executable, args, { stdio: 'inherit' });
-      processes.add(process);
-      process.once('exit', () => processes.delete(process));
-      await waitForServer(process, port);
+      const terminal = vscode.window.createTerminal({
+        name: `CASL2: ${config.program}`,
+        shellPath: executable,
+        shellArgs: args
+      });
+      terminals.add(terminal);
+      terminal.show();
+      await waitForServer(port);
       return new vscode.DebugAdapterServer(port, '127.0.0.1');
     }
   };
   context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('casl2', factory));
-  context.subscriptions.push({ dispose: () => processes.forEach(process => process.kill()) });
+  context.subscriptions.push(vscode.window.onDidCloseTerminal(terminal => terminals.delete(terminal)));
+  context.subscriptions.push({ dispose: () => terminals.forEach(terminal => terminal.dispose()) });
 }
 
 function availablePort() {
@@ -35,7 +39,7 @@ function availablePort() {
   });
 }
 
-function waitForServer(process, port) {
+function waitForServer(port) {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
     const connect = () => {
@@ -46,25 +50,19 @@ function waitForServer(process, port) {
       });
       socket.once('error', error => {
         socket.destroy();
-        if (Date.now() < deadline && process.exitCode === null) {
+        if (Date.now() < deadline) {
           setTimeout(connect, 25);
         } else {
           reject(new Error(`c2c2 debug adapter did not start: ${error.message}`));
         }
       });
     };
-    process.once('error', reject);
-    process.once('exit', code => {
-      if (Date.now() < deadline) {
-        reject(new Error(`c2c2 exited before the debug session started (code ${code})`));
-      }
-    });
     connect();
   });
 }
 
 function deactivate() {
-  processes.forEach(process => process.kill());
+  terminals.forEach(terminal => terminal.dispose());
 }
 
 module.exports = { activate, deactivate };

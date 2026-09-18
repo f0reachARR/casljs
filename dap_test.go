@@ -144,6 +144,46 @@ func TestDAPBreakpointWithoutCodeIsMoved(t *testing.T) {
 	}
 }
 
+func TestDAPPauseStopsRunningProgram(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "loop.cas")
+	if err := os.WriteFile(source, []byte("MAIN START\n\tJUMP MAIN\n\tEND\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	asm := newAssemblerState()
+	binary, startLabel, err := assemble(source, asm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memory := make([]uint16, 0x10000)
+	copy(memory, binary)
+	machineState := []int{expandLabel(asm.symtbl, startLabel), FR_PLUS, 0, 0, 0, 0, 0, 0, 0, 0, STACK_TOP}
+
+	server, client := net.Pipe()
+	defer client.Close()
+	adapter := newDAPAdapter(server, server, source, asm, memory, machineState)
+	done := make(chan error, 1)
+	go func() {
+		_, err := adapter.serve()
+		done <- err
+	}()
+	reader := bufio.NewReader(client)
+
+	sendDAPRequest(t, client, 1, "continue", map[string]interface{}{"threadId": dapThreadID})
+	requireDAPMessage(t, reader, "response", "continue")
+	sendDAPRequest(t, client, 2, "pause", map[string]interface{}{"threadId": dapThreadID})
+	requireDAPMessage(t, reader, "response", "pause")
+	stopped := requireDAPMessage(t, reader, "event", "stopped")
+	if reason := stopped["body"].(map[string]interface{})["reason"]; reason != "pause" {
+		t.Fatalf("stopped reason = %v, want pause", reason)
+	}
+
+	sendDAPRequest(t, client, 3, "disconnect", map[string]interface{}{})
+	requireDAPMessage(t, reader, "response", "disconnect")
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func sendDAPRequest(t *testing.T, writer io.Writer, sequence int, command string, arguments interface{}) {
 	t.Helper()
 	content, err := json.Marshal(map[string]interface{}{

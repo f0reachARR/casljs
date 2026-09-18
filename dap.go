@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const dapThreadID = 1
@@ -26,6 +27,7 @@ type dapProtocol struct {
 	reader *bufio.Reader
 	writer io.Writer
 	seq    int
+	mutex  sync.Mutex
 }
 
 type dapAdapter struct {
@@ -36,6 +38,8 @@ type dapAdapter struct {
 	state       []int
 	breakpoints map[int]bool
 	input       *bufio.Scanner
+	mutex       sync.Mutex
+	cancel      chan string
 }
 
 func serveDAP(port int, source string, asm *AssemblerState, memory []uint16, machineState []int) error {
@@ -144,15 +148,20 @@ func (adapter *dapAdapter) handle(request dapRequest) (bool, error) {
 		if err := adapter.protocol.respond(request, true, map[string]bool{"allThreadsContinued": true}, ""); err != nil {
 			return true, err
 		}
-		return true, adapter.continueExecution()
+		return true, adapter.startExecution(adapter.continueExecution)
 	case "next", "stepIn":
 		if err := adapter.protocol.respond(request, true, nil, ""); err != nil {
 			return true, err
 		}
-		return true, adapter.stepSourceLine()
+		return true, adapter.startExecution(adapter.stepSourceLine)
 	case "pause":
-		return true, adapter.protocol.respond(request, false, nil, "execution is not asynchronous")
+		if err := adapter.protocol.respond(request, true, nil, ""); err != nil {
+			return true, err
+		}
+		adapter.cancelExecution("pause")
+		return true, nil
 	case "disconnect", "terminate":
+		adapter.cancelExecution("disconnect")
 		return false, adapter.protocol.respond(request, true, nil, "")
 	default:
 		return true, fmt.Errorf("unsupported request %q", request.Command)
@@ -208,11 +217,47 @@ func (adapter *dapAdapter) addressForLine(requestedLine int) (int, int, bool) {
 	return bestAddress, bestLine, bestAddress >= 0
 }
 
-func (adapter *dapAdapter) continueExecution() error {
+func (adapter *dapAdapter) startExecution(execute func(<-chan string) error) error {
+	adapter.mutex.Lock()
+	if adapter.cancel != nil {
+		adapter.mutex.Unlock()
+		return fmt.Errorf("program is already running")
+	}
+	cancel := make(chan string, 1)
+	adapter.cancel = cancel
+	adapter.mutex.Unlock()
+
+	go func() {
+		_ = execute(cancel)
+		adapter.mutex.Lock()
+		if adapter.cancel == cancel {
+			adapter.cancel = nil
+		}
+		adapter.mutex.Unlock()
+	}()
+	return nil
+}
+
+func (adapter *dapAdapter) cancelExecution(reason string) {
+	adapter.mutex.Lock()
+	cancel := adapter.cancel
+	adapter.mutex.Unlock()
+	if cancel != nil {
+		select {
+		case cancel <- reason:
+		default:
+		}
+	}
+}
+
+func (adapter *dapAdapter) continueExecution(cancel <-chan string) error {
 	for {
+		if stopped, err := adapter.cancelled(cancel); stopped {
+			return err
+		}
 		terminated, err := adapter.executeInstruction()
 		if err != nil {
-			return err
+			return adapter.executionError(err)
 		}
 		if terminated {
 			return adapter.protocol.event("terminated", nil)
@@ -223,12 +268,15 @@ func (adapter *dapAdapter) continueExecution() error {
 	}
 }
 
-func (adapter *dapAdapter) stepSourceLine() error {
+func (adapter *dapAdapter) stepSourceLine(cancel <-chan string) error {
 	startFile, startLine := adapter.sourceLocation(adapter.state[PC])
 	for {
+		if stopped, err := adapter.cancelled(cancel); stopped {
+			return err
+		}
 		terminated, err := adapter.executeInstruction()
 		if err != nil {
-			return err
+			return adapter.executionError(err)
 		}
 		if terminated {
 			return adapter.protocol.event("terminated", nil)
@@ -240,10 +288,25 @@ func (adapter *dapAdapter) stepSourceLine() error {
 	}
 }
 
+func (adapter *dapAdapter) cancelled(cancel <-chan string) (bool, error) {
+	select {
+	case reason := <-cancel:
+		if reason == "disconnect" {
+			return true, nil
+		}
+		return true, adapter.stopped(reason)
+	default:
+		return false, nil
+	}
+}
+
 func (adapter *dapAdapter) executeInstruction() (bool, error) {
 	stopForInput, err := stepExec(adapter.memory, adapter.state)
 	if err != nil {
-		return true, nil
+		if strings.HasPrefix(err.Error(), "Program finished") {
+			return true, nil
+		}
+		return false, err
 	}
 	if stopForInput {
 		var text string
@@ -260,6 +323,16 @@ func (adapter *dapAdapter) executeInstruction() (bool, error) {
 		inputMode = INPUT_MODE_CMD
 	}
 	return false, nil
+}
+
+func (adapter *dapAdapter) executionError(err error) error {
+	if sendErr := adapter.protocol.event("output", map[string]interface{}{
+		"category": "stderr",
+		"output":   err.Error() + "\n",
+	}); sendErr != nil {
+		return sendErr
+	}
+	return adapter.stopped("exception")
 }
 
 func (adapter *dapAdapter) stopped(reason string) error {
@@ -387,6 +460,8 @@ func (protocol *dapProtocol) event(event string, body interface{}) error {
 }
 
 func (protocol *dapProtocol) send(message map[string]interface{}) error {
+	protocol.mutex.Lock()
+	defer protocol.mutex.Unlock()
 	protocol.seq++
 	message["seq"] = protocol.seq
 	content, err := json.Marshal(message)
